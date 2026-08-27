@@ -3,12 +3,16 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 
 import authRoutes from "./routes/authRoutes.js";
+import onboardingRoutes from "./routes/onboardingRoutes.js";
 
 const app = express();
 
 app.use(
   cors({
-    origin: "https://sonartts.onrender.com",
+    origin: [
+      "http://localhost:5173",
+      "https://sonartts.onrender.com",
+    ],
     credentials: true,
   })
 );
@@ -24,6 +28,15 @@ app.use(cookieParser());
 app.use(
   "/api/auth",
   authRoutes
+);
+
+// ==========================================
+// ONBOARDING ROUTES
+// ==========================================
+
+app.use(
+  "/api/onboarding",
+  onboardingRoutes
 );
 
 export default app;

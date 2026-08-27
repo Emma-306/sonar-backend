@@ -51,9 +51,9 @@ const userSchema = new mongoose.Schema(
         enum: [
           "purple",
           "blue",
-          "beige",
-          "maroon",
-          "green",
+          "coral",
+          "pink",
+          "teal",
         ],
       },
     },

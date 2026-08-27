@@ -1,14 +1,13 @@
 import jwt from "jsonwebtoken";
-import User from "../models/User.js";
 
-export const protect = async (req, res, next) => {
+const authMiddleware = (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return res.status(401).json({
         success: false,
-        message: "Not authorized. No token provided.",
+        message: "Authentication required",
       });
     }
 
@@ -19,16 +18,9 @@ export const protect = async (req, res, next) => {
       process.env.JWT_SECRET
     );
 
-    const user = await User.findById(decoded.id);
-
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "User not found.",
-      });
-    }
-
-    req.user = user;
+    req.user = {
+      id: decoded.id,
+    };
 
     next();
   } catch (error) {
@@ -36,7 +28,9 @@ export const protect = async (req, res, next) => {
 
     return res.status(401).json({
       success: false,
-      message: "Not authorized. Invalid token.",
+      message: "Invalid or expired token",
     });
   }
 };
+
+export default authMiddleware;
