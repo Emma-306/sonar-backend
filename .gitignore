@@ -9,7 +9,7 @@ uploads/
 tts/output/
 
 # Piper models
-tts/models/
+# tts/models/
 
 # Piper test audio
 tts/test-*.wav
