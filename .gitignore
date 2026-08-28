@@ -2,4 +2,11 @@ node_modules/
 .env
 .env.local
 
+# Temporary PDF uploads
 uploads/
+
+# Piper generated audio
+tts/output/
+
+# Piper test audio
+tts/test-*.wav
