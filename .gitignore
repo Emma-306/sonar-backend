@@ -8,5 +8,11 @@ uploads/
 # Piper generated audio
 tts/output/
 
+# Piper models
+tts/models/
+
 # Piper test audio
 tts/test-*.wav
+
+# Temporary files
+temp/
