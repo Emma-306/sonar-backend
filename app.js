@@ -13,7 +13,7 @@ app.use(
   cors({
     origin: [
       "http://localhost:5173",
-      "https://sonartts.onrender.com",
+      "https://sonarttss.netlify.app",
     ],
     credentials: true,
   })
