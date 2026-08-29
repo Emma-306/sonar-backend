@@ -6,4 +6,4 @@ services:
     startCommand: npm start
     envVars:
       - key: CLIENT_URLS
-        value: https://sonarttss.netlify.app
+        value: https://sonar-1-iop9.onrender.com

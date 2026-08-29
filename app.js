@@ -11,7 +11,7 @@ const app = express();
 
 const allowedOrigins = (
   process.env.CLIENT_URLS ||
-  "http://localhost:5173,https://sonarttss.netlify.app"
+  "http://localhost:5173,https://sonar-1-iop9.onrender.com"
 )
   .split(",")
   .map((origin) => origin.trim())
