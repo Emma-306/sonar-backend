@@ -135,12 +135,10 @@ export const generateUserSpeechAsync = async (req, res) => {
     const gender = user.onboarding?.preferredVoiceGender;
 
     if (!text) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "No extracted text is available for this PDF",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "No extracted text is available for this PDF",
+      });
     }
 
     if (!accent || !gender) {
@@ -188,14 +186,12 @@ export const generateUserSpeechAsync = async (req, res) => {
       status: "pending",
     });
 
-    res
-      .status(202)
-      .json({
-        success: true,
-        pending: true,
-        jobId,
-        message: "Speech generation started",
-      });
+    res.status(202).json({
+      success: true,
+      pending: true,
+      jobId,
+      message: "Speech generation started",
+    });
 
     const outputPath = path.join(
       process.cwd(),
@@ -238,16 +234,22 @@ export const generateUserSpeechAsync = async (req, res) => {
         voiceModel: model,
       });
 
-      await SpeechJob.findOneAndUpdate({ jobId }, {
-        status: "completed",
-        audio: audioResponse(audio),
-      });
+      await SpeechJob.findOneAndUpdate(
+        { jobId },
+        {
+          status: "completed",
+          audio: audioResponse(audio),
+        },
+      );
     } catch (error) {
       console.error("Background speech generation failed:", error);
-      await SpeechJob.findOneAndUpdate({ jobId }, {
-        status: "failed",
-        message: error.message,
-      });
+      await SpeechJob.findOneAndUpdate(
+        { jobId },
+        {
+          status: "failed",
+          message: error.message,
+        },
+      );
     } finally {
       if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
     }
@@ -255,12 +257,10 @@ export const generateUserSpeechAsync = async (req, res) => {
     return undefined;
   } catch (error) {
     console.error("Start speech job error:", error);
-    return res
-      .status(500)
-      .json({
-        success: false,
-        message: error.message || "Failed to start speech generation",
-      });
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to start speech generation",
+    });
   }
 };
 
