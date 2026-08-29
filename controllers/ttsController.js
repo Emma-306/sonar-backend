@@ -6,12 +6,11 @@ import fs from "fs";
 import User from "../models/User.js";
 import File from "../models/File.js";
 import Audio from "../models/Audio.js";
+import SpeechJob from "../models/SpeechJob.js";
 
 import cloudinary from "../config/cloudinary.js";
 
 import { getVoiceModel, generateSpeech } from "../services/ttsServices.js";
-
-const speechJobs = new Map();
 
 const audioResponse = (audio) => ({
   id: audio._id,
@@ -80,17 +79,27 @@ export const getUserVoice = async (req, res) => {
   }
 };
 
-export const getSpeechJob = (req, res) => {
-  const job = speechJobs.get(req.params.jobId);
+export const getSpeechJob = async (req, res) => {
+  const job = await SpeechJob.findOne({
+    jobId: req.params.jobId,
+    userId: req.user.id,
+  }).lean();
 
-  if (!job || job.userId !== req.user.id) {
+  if (!job) {
     return res.status(404).json({
       success: false,
       message: "Speech job not found",
     });
   }
 
-  return res.status(200).json(job);
+  return res.status(200).json({
+    success: job.status !== "failed",
+    pending: job.status === "pending",
+    jobId: job.jobId,
+    status: job.status,
+    message: job.message,
+    audio: job.audio,
+  });
 };
 
 export const generateUserSpeechAsync = async (req, res) => {
@@ -157,13 +166,12 @@ export const generateUserSpeechAsync = async (req, res) => {
         .json({ success: true, audio: audioResponse(existingAudio) });
     }
 
-    const activeJob = [...speechJobs.values()].find(
-      (job) =>
-        job.userId === req.user.id &&
-        job.fileId === fileId &&
-        job.textHash === textHash &&
-        job.status === "pending",
-    );
+    const activeJob = await SpeechJob.findOne({
+      userId: req.user.id,
+      fileId,
+      textHash,
+      status: "pending",
+    }).lean();
 
     if (activeJob) {
       return res
@@ -172,16 +180,13 @@ export const generateUserSpeechAsync = async (req, res) => {
     }
 
     const jobId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const job = {
-      success: true,
-      pending: true,
+    await SpeechJob.create({
       jobId,
       userId: req.user.id,
       fileId,
       textHash,
       status: "pending",
-    };
-    speechJobs.set(jobId, job);
+    });
 
     res
       .status(202)
@@ -233,27 +238,15 @@ export const generateUserSpeechAsync = async (req, res) => {
         voiceModel: model,
       });
 
-      speechJobs.set(jobId, {
-        success: true,
-        pending: false,
-        jobId,
+      await SpeechJob.findOneAndUpdate({ jobId }, {
         status: "completed",
         audio: audioResponse(audio),
-        userId: req.user.id,
-        fileId,
-        textHash,
       });
     } catch (error) {
       console.error("Background speech generation failed:", error);
-      speechJobs.set(jobId, {
-        success: false,
-        pending: false,
-        jobId,
+      await SpeechJob.findOneAndUpdate({ jobId }, {
         status: "failed",
         message: error.message,
-        userId: req.user.id,
-        fileId,
-        textHash,
       });
     } finally {
       if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
