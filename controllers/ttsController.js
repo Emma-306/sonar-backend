@@ -11,6 +11,19 @@ import cloudinary from "../config/cloudinary.js";
 
 import { getVoiceModel, generateSpeech } from "../services/ttsServices.js";
 
+const speechJobs = new Map();
+
+const audioResponse = (audio) => ({
+  id: audio._id,
+  fileId: audio.fileId,
+  originalName: audio.originalName,
+  accent: audio.accent,
+  gender: audio.gender,
+  voiceModel: audio.voiceModel,
+  fileSize: audio.fileSize,
+  audioUrl: audio.audioUrl,
+});
+
 // ============================================================
 // GET USER VOICE
 // ============================================================
@@ -67,8 +80,199 @@ export const getUserVoice = async (req, res) => {
   }
 };
 
+export const getSpeechJob = (req, res) => {
+  const job = speechJobs.get(req.params.jobId);
+
+  if (!job || job.userId !== req.user.id) {
+    return res.status(404).json({
+      success: false,
+      message: "Speech job not found",
+    });
+  }
+
+  return res.status(200).json(job);
+};
+
+export const generateUserSpeechAsync = async (req, res) => {
+  try {
+    const { fileId } = req.body;
+
+    if (!fileId || !mongoose.Types.ObjectId.isValid(fileId)) {
+      return res.status(400).json({
+        success: false,
+        message: "A valid fileId is required",
+      });
+    }
+
+    const [user, file] = await Promise.all([
+      User.findById(req.user.id),
+      File.findOne({ _id: fileId, userId: req.user.id }),
+    ]);
+
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
+
+    if (!file) {
+      return res
+        .status(404)
+        .json({ success: false, message: "PDF file not found" });
+    }
+
+    const text = file.extractedText?.trim();
+    const accent = user.onboarding?.preferredAccent;
+    const gender = user.onboarding?.preferredVoiceGender;
+
+    if (!text) {
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "No extracted text is available for this PDF",
+        });
+    }
+
+    if (!accent || !gender) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Voice preferences are not set" });
+    }
+
+    const model = getVoiceModel(accent, gender);
+    const normalizedText = text.replace(/\s+/g, " ");
+    const textHash = createHash("sha256").update(normalizedText).digest("hex");
+
+    const existingAudio = await Audio.findOne({
+      userId: req.user.id,
+      fileId: file._id,
+      voiceModel: model,
+      textHash,
+    }).sort({ createdAt: -1 });
+
+    if (existingAudio) {
+      return res
+        .status(200)
+        .json({ success: true, audio: audioResponse(existingAudio) });
+    }
+
+    const activeJob = [...speechJobs.values()].find(
+      (job) =>
+        job.userId === req.user.id &&
+        job.fileId === fileId &&
+        job.textHash === textHash &&
+        job.status === "pending",
+    );
+
+    if (activeJob) {
+      return res
+        .status(202)
+        .json({ success: true, pending: true, jobId: activeJob.jobId });
+    }
+
+    const jobId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const job = {
+      success: true,
+      pending: true,
+      jobId,
+      userId: req.user.id,
+      fileId,
+      textHash,
+      status: "pending",
+    };
+    speechJobs.set(jobId, job);
+
+    res
+      .status(202)
+      .json({
+        success: true,
+        pending: true,
+        jobId,
+        message: "Speech generation started",
+      });
+
+    const outputPath = path.join(
+      process.cwd(),
+      "temp",
+      "tts",
+      `speech-${jobId}.wav`,
+    );
+
+    try {
+      console.log("Starting background Piper generation", {
+        jobId,
+        fileId,
+        textLength: normalizedText.length,
+        model,
+      });
+
+      await generateSpeech({
+        text: normalizedText,
+        accent,
+        gender,
+        outputPath,
+      });
+      const stats = fs.statSync(outputPath);
+      const cloudinaryResult = await cloudinary.uploader.upload(outputPath, {
+        resource_type: "video",
+        folder: "sonar/audio",
+        public_id: `speech-${Date.now()}`,
+      });
+
+      const audio = await Audio.create({
+        userId: req.user.id,
+        fileId: file._id,
+        textHash,
+        originalName: `${path.parse(file.originalName).name}.wav`,
+        audioUrl: cloudinaryResult.secure_url,
+        mimeType: "audio/wav",
+        fileSize: stats.size,
+        accent,
+        gender,
+        voiceModel: model,
+      });
+
+      speechJobs.set(jobId, {
+        success: true,
+        pending: false,
+        jobId,
+        status: "completed",
+        audio: audioResponse(audio),
+        userId: req.user.id,
+        fileId,
+        textHash,
+      });
+    } catch (error) {
+      console.error("Background speech generation failed:", error);
+      speechJobs.set(jobId, {
+        success: false,
+        pending: false,
+        jobId,
+        status: "failed",
+        message: error.message,
+        userId: req.user.id,
+        fileId,
+        textHash,
+      });
+    } finally {
+      if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+    }
+
+    return undefined;
+  } catch (error) {
+    console.error("Start speech job error:", error);
+    return res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Failed to start speech generation",
+      });
+  }
+};
+
 // ============================================================
-// GENERATE USER SPEECH
+// LEGACY SYNCHRONOUS GENERATE USER SPEECH
 // ============================================================
 
 export const generateUserSpeech = async (req, res) => {
