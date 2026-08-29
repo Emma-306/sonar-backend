@@ -16,6 +16,10 @@ const voiceMap = {
     male: "en_GB-alan-medium",
     female: "en_GB-cori-medium",
   },
+  british: {
+    male: "en_GB-alan-medium",
+    female: "en_GB-cori-medium",
+  },
 };
 
 // ============================================================

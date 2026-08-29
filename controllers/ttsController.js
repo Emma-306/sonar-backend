@@ -36,7 +36,16 @@ export const getUserVoice = async (req, res) => {
       });
     }
 
-    const model = getVoiceModel(accent, gender);
+    let model;
+
+    try {
+      model = getVoiceModel(accent, gender);
+    } catch (voiceError) {
+      return res.status(400).json({
+        success: false,
+        message: voiceError.message,
+      });
+    }
 
     return res.status(200).json({
       success: true,
@@ -152,7 +161,16 @@ export const generateUserSpeech = async (req, res) => {
     // GET PIPER MODEL
     // ========================================================
 
-    const model = getVoiceModel(accent, gender);
+    let model;
+
+    try {
+      model = getVoiceModel(accent, gender);
+    } catch (voiceError) {
+      return res.status(400).json({
+        success: false,
+        message: voiceError.message,
+      });
+    }
 
     const existingAudio = await Audio.findOne({
       userId: req.user.id,
