@@ -40,6 +40,15 @@ const fileSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+
+    // ========================================================
+    // PINNED FILE
+    // ========================================================
+
+    isPinned: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

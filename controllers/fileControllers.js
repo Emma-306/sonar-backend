@@ -41,7 +41,7 @@ export const uploadFile = async (req, res) => {
     }
 
     // ========================================================
-    // CREATE TEMPORARY FILE FOR PDF TEXT EXTRACTION
+    // CREATE TEMPORARY FILE
     // ========================================================
 
     const tempDirectory = os.tmpdir();
@@ -120,7 +120,7 @@ export const uploadFile = async (req, res) => {
     );
 
     // ========================================================
-    // SAVE FILE INFORMATION TO MONGODB
+    // SAVE FILE TO MONGODB
     // ========================================================
 
     const file = await File.create({
@@ -142,6 +142,9 @@ export const uploadFile = async (req, res) => {
         req.file.mimetype,
 
       extractedText,
+
+      // New files are not pinned by default
+      isPinned: false,
     });
 
     console.log(
@@ -186,6 +189,9 @@ export const uploadFile = async (req, res) => {
 
         fileUrl:
           file.cloudinaryUrl,
+
+        isPinned:
+          file.isPinned,
       },
     });
   } catch (error) {
@@ -306,6 +312,9 @@ export const getFile = async (req, res) => {
 
         extractedText:
           file.extractedText,
+
+        isPinned:
+          file.isPinned,
       },
     });
   } catch (error) {
@@ -341,7 +350,7 @@ export const getRecentFiles = async (req, res) => {
       })
       .limit(5)
       .select(
-        "_id originalName createdAt"
+        "_id originalName createdAt isPinned"
       );
 
     // ========================================================
@@ -359,6 +368,9 @@ export const getRecentFiles = async (req, res) => {
 
         createdAt:
           file.createdAt,
+
+        isPinned:
+          file.isPinned,
       })),
     });
   } catch (error) {
@@ -371,6 +383,135 @@ export const getRecentFiles = async (req, res) => {
       success: false,
       message:
         "Failed to get recent files.",
+    });
+  }
+};
+
+// ============================================================
+// GET PINNED FILES
+// ============================================================
+
+export const getPinnedFiles = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // ========================================================
+    // FIND USER'S PINNED FILES
+    // ========================================================
+
+    const files = await File.find({
+      userId,
+      isPinned: true,
+    })
+      .sort({
+        updatedAt: -1,
+      })
+      .select(
+        "_id originalName createdAt updatedAt isPinned"
+      );
+
+    // ========================================================
+    // RESPONSE
+    // ========================================================
+
+    return res.status(200).json({
+      success: true,
+
+      files: files.map((file) => ({
+        id: file._id,
+
+        originalName:
+          file.originalName,
+
+        createdAt:
+          file.createdAt,
+
+        updatedAt:
+          file.updatedAt,
+
+        isPinned:
+          file.isPinned,
+      })),
+    });
+  } catch (error) {
+    console.error(
+      "Get pinned files error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        "Failed to get pinned files.",
+    });
+  }
+};
+
+// ============================================================
+// TOGGLE PIN FILE
+// ============================================================
+
+export const togglePinFile = async (req, res) => {
+  try {
+    const { fileId } = req.params;
+
+    const userId = req.user.id;
+
+    // ========================================================
+    // FIND FILE BELONGING TO CURRENT USER
+    // ========================================================
+
+    const file = await File.findOne({
+      _id: fileId,
+      userId,
+    });
+
+    if (!file) {
+      return res.status(404).json({
+        success: false,
+        message: "File not found.",
+      });
+    }
+
+    // ========================================================
+    // TOGGLE PIN STATUS
+    // ========================================================
+
+    file.isPinned = !file.isPinned;
+
+    await file.save();
+
+    // ========================================================
+    // RESPONSE
+    // ========================================================
+
+    return res.status(200).json({
+      success: true,
+
+      message: file.isPinned
+        ? "File pinned successfully."
+        : "File unpinned successfully.",
+
+      file: {
+        id: file._id,
+
+        originalName:
+          file.originalName,
+
+        isPinned:
+          file.isPinned,
+      },
+    });
+  } catch (error) {
+    console.error(
+      "Toggle pin file error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        "Failed to update pinned file.",
     });
   }
 };

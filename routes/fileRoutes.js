@@ -1,13 +1,14 @@
 import express from "express";
 
 import uploadMiddleware from "../middleware/uploadMiddleware.js";
-
 import authMiddleware from "../middleware/authMiddleware.js";
 
 import {
   getFile,
   uploadFile,
   getRecentFiles,
+  getPinnedFiles,
+  togglePinFile,
 } from "../controllers/fileControllers.js";
 
 const router = express.Router();
@@ -31,6 +32,26 @@ router.get(
   "/recent",
   authMiddleware,
   getRecentFiles
+);
+
+// ============================================================
+// GET PINNED FILES
+// ============================================================
+
+router.get(
+  "/pinned",
+  authMiddleware,
+  getPinnedFiles
+);
+
+// ============================================================
+// PIN / UNPIN FILE
+// ============================================================
+
+router.patch(
+  "/:fileId/pin",
+  authMiddleware,
+  togglePinFile
 );
 
 // ============================================================
