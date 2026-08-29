@@ -68,12 +68,15 @@ const audioSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
-const Audio = mongoose.model(
-  "Audio",
-  audioSchema
-);
+audioSchema.index({
+  userId: 1,
+  fileId: 1,
+  voiceModel: 1,
+});
+
+const Audio = mongoose.model("Audio", audioSchema);
 
 export default Audio;

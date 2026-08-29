@@ -27,13 +27,7 @@ export const googleLogin = async (req, res) => {
 
     console.log("Google user:", googleUser);
 
-    const {
-      sub: googleId,
-      name,
-      email,
-      picture,
-      email_verified,
-    } = googleUser;
+    const { sub: googleId, name, email, picture, email_verified } = googleUser;
 
     // ==========================================
     // MAKE SURE EMAIL IS VERIFIED
@@ -71,16 +65,17 @@ export const googleLogin = async (req, res) => {
       if (user) {
         user.googleId = googleId;
 
-        if (!user.profilePicture && picture) {
+        if (name) {
+          user.name = name;
+        }
+
+        if (picture) {
           user.profilePicture = picture;
         }
 
         await user.save();
 
-        console.log(
-          "Google account linked to existing user:",
-          user._id
-        );
+        console.log("Google account linked to existing user:", user._id);
       }
     }
 
@@ -97,19 +92,14 @@ export const googleLogin = async (req, res) => {
         onboardingCompleted: false,
       });
 
-      console.log(
-        "New Google user created:",
-        user._id
-      );
+      console.log("New Google user created:", user._id);
     }
 
     // ==========================================
     // GENERATE JWT
     // ==========================================
 
-    const token = generateToken(
-      user._id.toString()
-    );
+    const token = generateToken(user._id.toString());
 
     // ==========================================
     // RESPONSE
@@ -127,36 +117,23 @@ export const googleLogin = async (req, res) => {
         email: user.email,
         profilePicture: user.profilePicture,
 
-        onboardingCompleted:
-          user.onboardingCompleted,
+        onboardingCompleted: user.onboardingCompleted,
 
-        displayName:
-          user.onboarding?.displayName || null,
+        displayName: user.onboarding?.displayName || null,
 
-        voice:
-          user.onboarding?.preferredVoiceGender ||
-          null,
+        voice: user.onboarding?.preferredVoiceGender || null,
 
-        accent:
-          user.onboarding?.preferredAccent ||
-          null,
+        accent: user.onboarding?.preferredAccent || null,
 
-        brandColor:
-          user.onboarding?.brandColor ||
-          null,
+        brandColor: user.onboarding?.brandColor || null,
       },
     });
   } catch (error) {
-    console.error(
-      "Google login error:",
-      error
-    );
+    console.error("Google login error:", error);
 
     return res.status(401).json({
       success: false,
-      message:
-        error.message ||
-        "Google authentication failed",
+      message: error.message || "Google authentication failed",
     });
   }
 };

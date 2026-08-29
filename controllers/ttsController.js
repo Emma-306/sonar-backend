@@ -8,10 +8,7 @@ import Audio from "../models/Audio.js";
 
 import cloudinary from "../config/cloudinary.js";
 
-import {
-  getVoiceModel,
-  generateSpeech,
-} from "../services/ttsServices.js";
+import { getVoiceModel, generateSpeech } from "../services/ttsServices.js";
 
 // ============================================================
 // GET USER VOICE
@@ -19,9 +16,7 @@ import {
 
 export const getUserVoice = async (req, res) => {
   try {
-    const user = await User.findById(
-      req.user.id
-    );
+    const user = await User.findById(req.user.id);
 
     if (!user) {
       return res.status(404).json({
@@ -30,24 +25,18 @@ export const getUserVoice = async (req, res) => {
       });
     }
 
-    const accent =
-      user.onboarding?.preferredAccent;
+    const accent = user.onboarding?.preferredAccent;
 
-    const gender =
-      user.onboarding?.preferredVoiceGender;
+    const gender = user.onboarding?.preferredVoiceGender;
 
     if (!accent || !gender) {
       return res.status(400).json({
         success: false,
-        message:
-          "Voice preferences are not set",
+        message: "Voice preferences are not set",
       });
     }
 
-    const model = getVoiceModel(
-      accent,
-      gender
-    );
+    const model = getVoiceModel(accent, gender);
 
     return res.status(200).json({
       success: true,
@@ -59,10 +48,7 @@ export const getUserVoice = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error(
-      "Get user voice error:",
-      error
-    );
+    console.error("Get user voice error:", error);
 
     return res.status(500).json({
       success: false,
@@ -75,10 +61,7 @@ export const getUserVoice = async (req, res) => {
 // GENERATE USER SPEECH
 // ============================================================
 
-export const generateUserSpeech = async (
-  req,
-  res
-) => {
+export const generateUserSpeech = async (req, res) => {
   let outputPath = null;
 
   try {
@@ -92,11 +75,7 @@ export const generateUserSpeech = async (
     // CHECK TEXT
     // ========================================================
 
-    if (
-      !text ||
-      typeof text !== "string" ||
-      !text.trim()
-    ) {
+    if (!text || typeof text !== "string" || !text.trim()) {
       return res.status(400).json({
         success: false,
         message: "Text is required",
@@ -118,11 +97,7 @@ export const generateUserSpeech = async (
     // VALIDATE FILE ID
     // ========================================================
 
-    if (
-      !mongoose.Types.ObjectId.isValid(
-        fileId
-      )
-    ) {
+    if (!mongoose.Types.ObjectId.isValid(fileId)) {
       return res.status(400).json({
         success: false,
         message: "Invalid fileId",
@@ -133,9 +108,7 @@ export const generateUserSpeech = async (
     // GET USER
     // ========================================================
 
-    const user = await User.findById(
-      req.user.id
-    );
+    const user = await User.findById(req.user.id);
 
     if (!user) {
       return res.status(404).json({
@@ -164,17 +137,14 @@ export const generateUserSpeech = async (
     // GET VOICE
     // ========================================================
 
-    const accent =
-      user.onboarding?.preferredAccent;
+    const accent = user.onboarding?.preferredAccent;
 
-    const gender =
-      user.onboarding?.preferredVoiceGender;
+    const gender = user.onboarding?.preferredVoiceGender;
 
     if (!accent || !gender) {
       return res.status(400).json({
         success: false,
-        message:
-          "Voice preferences are not set",
+        message: "Voice preferences are not set",
       });
     }
 
@@ -182,93 +152,71 @@ export const generateUserSpeech = async (
     // GET PIPER MODEL
     // ========================================================
 
-    const model = getVoiceModel(
-      accent,
-      gender
-    );
+    const model = getVoiceModel(accent, gender);
 
-    console.log(
-      "================================="
-    );
+    const existingAudio = await Audio.findOne({
+      userId: req.user.id,
+      fileId: file._id,
+      voiceModel: model,
+    }).sort({ createdAt: -1 });
 
-    console.log(
-      "Generating speech"
-    );
+    if (existingAudio) {
+      return res.status(200).json({
+        success: true,
+        message: "Speech already generated.",
+        audio: {
+          id: existingAudio._id,
+          fileId: existingAudio.fileId,
+          originalName: existingAudio.originalName,
+          accent: existingAudio.accent,
+          gender: existingAudio.gender,
+          voiceModel: existingAudio.voiceModel,
+          fileSize: existingAudio.fileSize,
+          audioUrl: existingAudio.audioUrl,
+        },
+      });
+    }
 
-    console.log(
-      "User:",
-      req.user.id
-    );
+    console.log("=================================");
 
-    console.log(
-      "File ID:",
-      fileId
-    );
+    console.log("Generating speech");
 
-    console.log(
-      "File:",
-      file.originalName
-    );
+    console.log("User:", req.user.id);
 
-    console.log(
-      "Accent:",
-      accent
-    );
+    console.log("File ID:", fileId);
 
-    console.log(
-      "Gender:",
-      gender
-    );
+    console.log("File:", file.originalName);
 
-    console.log(
-      "Model:",
-      model
-    );
+    console.log("Accent:", accent);
 
-    console.log(
-      "================================="
-    );
+    console.log("Gender:", gender);
+
+    console.log("Model:", model);
+
+    console.log("=================================");
 
     // ========================================================
     // CREATE TEMPORARY AUDIO PATH
     // ========================================================
 
-    const filename =
-      `speech-${Date.now()}.wav`;
+    const filename = `speech-${Date.now()}.wav`;
 
-    const outputDirectory =
-      path.join(
-        process.cwd(),
-        "temp",
-        "tts"
-      );
+    const outputDirectory = path.join(process.cwd(), "temp", "tts");
 
     // Create temp directory
-    if (
-      !fs.existsSync(
-        outputDirectory
-      )
-    ) {
-      fs.mkdirSync(
-        outputDirectory,
-        {
-          recursive: true,
-        }
-      );
+    if (!fs.existsSync(outputDirectory)) {
+      fs.mkdirSync(outputDirectory, {
+        recursive: true,
+      });
     }
 
-    outputPath = path.join(
-      outputDirectory,
-      filename
-    );
+    outputPath = path.join(outputDirectory, filename);
 
     // ========================================================
     // GENERATE AUDIO WITH PIPER
     // ========================================================
 
-    console.log(
-      "Starting Piper speech generation..."
-    );
+    console.log("Starting Piper speech generation...");
 
     await generateSpeech({
       text: text.trim(),
@@ -277,117 +225,75 @@ export const generateUserSpeech = async (
       outputPath,
     });
 
-    console.log(
-      "Piper generation completed."
-    );
+    console.log("Piper generation completed.");
 
     // ========================================================
     // CHECK AUDIO
     // ========================================================
 
-    if (
-      !fs.existsSync(outputPath)
-    ) {
-      throw new Error(
-        "Audio file was not created"
-      );
+    if (!fs.existsSync(outputPath)) {
+      throw new Error("Audio file was not created");
     }
 
-    const stats =
-      fs.statSync(outputPath);
+    const stats = fs.statSync(outputPath);
 
     if (stats.size === 0) {
-      throw new Error(
-        "Generated audio file is empty"
-      );
+      throw new Error("Generated audio file is empty");
     }
 
-    console.log(
-      "Generated audio size:",
-      stats.size,
-      "bytes"
-    );
+    console.log("Generated audio size:", stats.size, "bytes");
 
     // ========================================================
     // UPLOAD AUDIO TO CLOUDINARY
     // ========================================================
 
-    console.log(
-      "Uploading audio to Cloudinary..."
-    );
+    console.log("Uploading audio to Cloudinary...");
 
-    const cloudinaryResult =
-      await cloudinary.uploader.upload(
-        outputPath,
-        {
-          resource_type: "video",
-          folder: "sonar/audio",
+    const cloudinaryResult = await cloudinary.uploader.upload(outputPath, {
+      resource_type: "video",
+      folder: "sonar/audio",
 
-          public_id:
-            `speech-${Date.now()}`,
-        }
-      );
+      public_id: `speech-${Date.now()}`,
+    });
 
-    console.log(
-      "Audio uploaded to Cloudinary:"
-    );
+    console.log("Audio uploaded to Cloudinary:");
 
-    console.log(
-      cloudinaryResult.secure_url
-    );
+    console.log(cloudinaryResult.secure_url);
 
     // ========================================================
     // SAVE AUDIO TO MONGODB
     // ========================================================
 
-    const audio =
-      await Audio.create({
-        userId: req.user.id,
+    const audio = await Audio.create({
+      userId: req.user.id,
 
-        fileId: file._id,
+      fileId: file._id,
 
-        originalName:
-          `${path.parse(
-            file.originalName
-          ).name}.wav`,
+      originalName: `${path.parse(file.originalName).name}.wav`,
 
-        audioUrl:
-          cloudinaryResult.secure_url,
+      audioUrl: cloudinaryResult.secure_url,
 
-        mimeType:
-          "audio/wav",
+      mimeType: "audio/wav",
 
-        fileSize:
-          stats.size,
+      fileSize: stats.size,
 
-        accent,
+      accent,
 
-        gender,
+      gender,
 
-        voiceModel:
-          model,
-      });
+      voiceModel: model,
+    });
 
-    console.log(
-      "Audio saved to MongoDB:",
-      audio._id
-    );
+    console.log("Audio saved to MongoDB:", audio._id);
 
     // ========================================================
     // DELETE TEMPORARY AUDIO
     // ========================================================
 
-    if (
-      outputPath &&
-      fs.existsSync(outputPath)
-    ) {
-      fs.unlinkSync(
-        outputPath
-      );
+    if (outputPath && fs.existsSync(outputPath)) {
+      fs.unlinkSync(outputPath);
 
-      console.log(
-        "Temporary audio deleted."
-      );
+      console.log("Temporary audio deleted.");
     }
 
     // ========================================================
@@ -397,32 +303,24 @@ export const generateUserSpeech = async (
     return res.status(201).json({
       success: true,
 
-      message:
-        "Speech generated successfully.",
+      message: "Speech generated successfully.",
 
       audio: {
         id: audio._id,
 
-        fileId:
-          audio.fileId,
+        fileId: audio.fileId,
 
-        originalName:
-          audio.originalName,
+        originalName: audio.originalName,
 
-        accent:
-          audio.accent,
+        accent: audio.accent,
 
-        gender:
-          audio.gender,
+        gender: audio.gender,
 
-        voiceModel:
-          audio.voiceModel,
+        voiceModel: audio.voiceModel,
 
-        fileSize:
-          audio.fileSize,
+        fileSize: audio.fileSize,
 
-        audioUrl:
-          audio.audioUrl,
+        audioUrl: audio.audioUrl,
       },
     });
   } catch (error) {
@@ -430,39 +328,25 @@ export const generateUserSpeech = async (
     // LOG ERROR
     // ========================================================
 
-    console.error(
-      "Generate speech error:",
-      error
-    );
+    console.error("Generate speech error:", error);
 
     // ========================================================
     // DELETE TEMP AUDIO
     // ========================================================
 
-    if (
-      outputPath &&
-      fs.existsSync(outputPath)
-    ) {
+    if (outputPath && fs.existsSync(outputPath)) {
       try {
-        fs.unlinkSync(
-          outputPath
-        );
+        fs.unlinkSync(outputPath);
 
-        console.log(
-          "Deleted temporary audio after failure."
-        );
+        console.log("Deleted temporary audio after failure.");
       } catch (deleteError) {
-        console.error(
-          "Failed to delete temporary audio:",
-          deleteError
-        );
+        console.error("Failed to delete temporary audio:", deleteError);
       }
     }
 
     return res.status(500).json({
       success: false,
-      message:
-        "Failed to generate speech",
+      message: "Failed to generate speech",
       error: error.message,
     });
   }

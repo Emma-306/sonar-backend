@@ -1,4 +1,4 @@
-import fs from "fs";
+import fs from "fs/promises";
 import { PDFParse } from "pdf-parse";
 
 const extractTextFromPDF = async (filePath) => {
@@ -6,7 +6,7 @@ const extractTextFromPDF = async (filePath) => {
 
   try {
     // Read the uploaded PDF
-    const pdfBuffer = fs.readFileSync(filePath);
+    const pdfBuffer = await fs.readFile(filePath);
 
     // Create the PDF parser
     parser = new PDFParse({
