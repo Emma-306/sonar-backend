@@ -2,7 +2,6 @@ import express from "express";
 
 import {
   getUserVoice,
-  generateUserSpeech,
   generateUserSpeechAsync,
   getSpeechJob,
 } from "../controllers/ttsController.js";

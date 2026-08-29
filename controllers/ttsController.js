@@ -7,10 +7,10 @@ import User from "../models/User.js";
 import File from "../models/File.js";
 import Audio from "../models/Audio.js";
 import SpeechJob from "../models/SpeechJob.js";
-
 import cloudinary from "../config/cloudinary.js";
-
 import { getVoiceModel, generateSpeech } from "../services/ttsServices.js";
+
+const runningJobs = new Set();
 
 const audioResponse = (audio) => ({
   id: audio._id,
@@ -23,12 +23,16 @@ const audioResponse = (audio) => ({
   audioUrl: audio.audioUrl,
 });
 
-const runningJobs = new Set();
-
 const processSpeechJob = async (jobId) => {
   if (runningJobs.has(jobId)) return;
-
   runningJobs.add(jobId);
+
+  const outputPath = path.join(
+    process.cwd(),
+    "temp",
+    "tts",
+    `speech-${jobId}.mp3`,
+  );
 
   try {
     const job = await SpeechJob.findOne({ jobId });
@@ -39,33 +43,24 @@ const processSpeechJob = async (jobId) => {
       File.findOne({ _id: job.fileId, userId: job.userId }),
     ]);
 
-    if (!user || !file) {
+    if (!user || !file)
       throw new Error("Speech source file or user was not found");
-    }
 
     const accent = user.onboarding?.preferredAccent;
     const gender = user.onboarding?.preferredVoiceGender;
-    const model = getVoiceModel(accent, gender);
-    const normalizedText = file.extractedText?.trim().replace(/\s+/g, " ");
+    const voiceId = getVoiceModel(accent, gender);
+    const text = file.extractedText?.trim().replace(/\s+/g, " ");
 
-    if (!normalizedText)
-      throw new Error("No extracted text is available for this PDF");
+    if (!text) throw new Error("No extracted text is available for this PDF");
 
-    const outputPath = path.join(
-      process.cwd(),
-      "temp",
-      "tts",
-      `speech-${jobId}.mp3`,
-    );
-
-    console.log("Starting background Piper generation", {
+    console.log("Starting ElevenLabs generation", {
       jobId,
       fileId: job.fileId,
-      textLength: normalizedText.length,
-      model,
+      textLength: text.length,
+      voiceId,
     });
 
-    await generateSpeech({ text: normalizedText, accent, gender, outputPath });
+    await generateSpeech({ text, accent, gender, outputPath });
     const stats = fs.statSync(outputPath);
     const cloudinaryResult = await cloudinary.uploader.upload(outputPath, {
       resource_type: "video",
@@ -83,7 +78,7 @@ const processSpeechJob = async (jobId) => {
       fileSize: stats.size,
       accent,
       gender,
-      voiceModel: model,
+      voiceModel: voiceId,
     });
 
     await SpeechJob.findOneAndUpdate(
@@ -91,76 +86,45 @@ const processSpeechJob = async (jobId) => {
       { status: "completed", audio: audioResponse(audio), message: null },
     );
   } catch (error) {
-    console.error("Background speech generation failed:", error);
+    console.error("ElevenLabs speech generation failed:", error);
     await SpeechJob.findOneAndUpdate(
       { jobId },
       { status: "failed", message: error.message },
     );
   } finally {
-    const outputPath = path.join(
-      process.cwd(),
-      "temp",
-      "tts",
-      `speech-${jobId}.wav`,
-    );
     if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
     runningJobs.delete(jobId);
   }
 };
 
-// ============================================================
-// GET USER VOICE
-// ============================================================
-
 export const getUserVoice = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
-    }
+    if (!user)
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
 
     const accent = user.onboarding?.preferredAccent;
-
     const gender = user.onboarding?.preferredVoiceGender;
-
     if (!accent || !gender) {
-      return res.status(400).json({
-        success: false,
-        message: "Voice preferences are not set",
-      });
-    }
-
-    let model;
-
-    try {
-      model = getVoiceModel(accent, gender);
-    } catch (voiceError) {
-      return res.status(400).json({
-        success: false,
-        message: voiceError.message,
-      });
+      return res
+        .status(400)
+        .json({ success: false, message: "Voice preferences are not set" });
     }
 
     return res.status(200).json({
       success: true,
-
-      voice: {
-        accent,
-        gender,
-        model,
-      },
+      voice: { accent, gender, model: getVoiceModel(accent, gender) },
     });
   } catch (error) {
     console.error("Get user voice error:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Failed to get user voice",
-    });
+    return res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Failed to get user voice",
+      });
   }
 };
 
@@ -170,16 +134,11 @@ export const getSpeechJob = async (req, res) => {
     userId: req.user.id,
   }).lean();
 
-  if (!job) {
-    return res.status(404).json({
-      success: false,
-      message: "Speech job not found",
-    });
-  }
-
-  if (job.status === "pending" && !runningJobs.has(job.jobId)) {
-    void processSpeechJob(job.jobId);
-  }
+  if (!job)
+    return res
+      .status(404)
+      .json({ success: false, message: "Speech job not found" });
+  if (job.status === "pending") void processSpeechJob(job.jobId);
 
   return res.status(200).json({
     success: job.status !== "failed",
@@ -194,12 +153,10 @@ export const getSpeechJob = async (req, res) => {
 export const generateUserSpeechAsync = async (req, res) => {
   try {
     const { fileId } = req.body;
-
     if (!fileId || !mongoose.Types.ObjectId.isValid(fileId)) {
-      return res.status(400).json({
-        success: false,
-        message: "A valid fileId is required",
-      });
+      return res
+        .status(400)
+        .json({ success: false, message: "A valid fileId is required" });
     }
 
     const [user, file] = await Promise.all([
@@ -207,51 +164,44 @@ export const generateUserSpeechAsync = async (req, res) => {
       File.findOne({ _id: fileId, userId: req.user.id }),
     ]);
 
-    if (!user) {
+    if (!user)
       return res
         .status(404)
         .json({ success: false, message: "User not found" });
-    }
-
-    if (!file) {
+    if (!file)
       return res
         .status(404)
         .json({ success: false, message: "PDF file not found" });
-    }
 
     const text = file.extractedText?.trim();
     const accent = user.onboarding?.preferredAccent;
     const gender = user.onboarding?.preferredVoiceGender;
-
-    if (!text) {
-      return res.status(400).json({
-        success: false,
-        message: "No extracted text is available for this PDF",
-      });
-    }
-
-    if (!accent || !gender) {
+    if (!text)
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "No extracted text is available for this PDF",
+        });
+    if (!accent || !gender)
       return res
         .status(400)
         .json({ success: false, message: "Voice preferences are not set" });
-    }
 
-    const model = getVoiceModel(accent, gender);
+    const voiceId = getVoiceModel(accent, gender);
     const normalizedText = text.replace(/\s+/g, " ");
     const textHash = createHash("sha256").update(normalizedText).digest("hex");
-
     const existingAudio = await Audio.findOne({
       userId: req.user.id,
-      fileId: file._id,
-      voiceModel: model,
+      fileId,
+      voiceModel: voiceId,
       textHash,
     }).sort({ createdAt: -1 });
 
-    if (existingAudio) {
+    if (existingAudio)
       return res
         .status(200)
         .json({ success: true, audio: audioResponse(existingAudio) });
-    }
 
     const activeJob = await SpeechJob.findOne({
       userId: req.user.id,
@@ -259,12 +209,10 @@ export const generateUserSpeechAsync = async (req, res) => {
       textHash,
       status: "pending",
     }).lean();
-
-    if (activeJob) {
+    if (activeJob)
       return res
         .status(202)
         .json({ success: true, pending: true, jobId: activeJob.jobId });
-    }
 
     const jobId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     await SpeechJob.create({
@@ -275,336 +223,22 @@ export const generateUserSpeechAsync = async (req, res) => {
       status: "pending",
     });
 
-    res.status(202).json({
-      success: true,
-      pending: true,
-      jobId,
-      message: "Speech generation started",
-    });
-
+    res
+      .status(202)
+      .json({
+        success: true,
+        pending: true,
+        jobId,
+        message: "Speech generation started",
+      });
     void processSpeechJob(jobId);
-
-    return undefined;
   } catch (error) {
     console.error("Start speech job error:", error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || "Failed to start speech generation",
-    });
-  }
-};
-
-// ============================================================
-// LEGACY SYNCHRONOUS GENERATE USER SPEECH
-// ============================================================
-
-export const generateUserSpeech = async (req, res) => {
-  let outputPath = null;
-
-  try {
-    // ========================================================
-    // REQUEST DATA
-    // ========================================================
-
-    const { fileId } = req.body;
-
-    // ========================================================
-    // CHECK FILE ID
-    // ========================================================
-
-    if (!fileId) {
-      return res.status(400).json({
+    return res
+      .status(500)
+      .json({
         success: false,
-        message: "fileId is required",
+        message: error.message || "Failed to start speech generation",
       });
-    }
-
-    // ========================================================
-    // VALIDATE FILE ID
-    // ========================================================
-
-    if (!mongoose.Types.ObjectId.isValid(fileId)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid fileId",
-      });
-    }
-
-    // ========================================================
-    // GET USER
-    // ========================================================
-
-    const user = await User.findById(req.user.id);
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
-    }
-
-    // ========================================================
-    // GET PDF
-    // ========================================================
-
-    const file = await File.findOne({
-      _id: fileId,
-      userId: req.user.id,
-    });
-
-    if (!file) {
-      return res.status(404).json({
-        success: false,
-        message: "PDF file not found",
-      });
-    }
-
-    const text = file.extractedText;
-
-    if (!text || !text.trim()) {
-      return res.status(400).json({
-        success: false,
-        message: "No extracted text is available for this PDF",
-      });
-    }
-
-    // ========================================================
-    // GET VOICE
-    // ========================================================
-
-    const accent = user.onboarding?.preferredAccent;
-
-    const gender = user.onboarding?.preferredVoiceGender;
-
-    if (!accent || !gender) {
-      return res.status(400).json({
-        success: false,
-        message: "Voice preferences are not set",
-      });
-    }
-
-    // ========================================================
-    // GET PIPER MODEL
-    // ========================================================
-
-    let model;
-
-    try {
-      model = getVoiceModel(accent, gender);
-    } catch (voiceError) {
-      return res.status(400).json({
-        success: false,
-        message: voiceError.message,
-      });
-    }
-
-    const normalizedText = text.trim().replace(/\s+/g, " ");
-    const textHash = createHash("sha256").update(normalizedText).digest("hex");
-
-    const existingAudio = await Audio.findOne({
-      userId: req.user.id,
-      fileId: file._id,
-      voiceModel: model,
-      textHash,
-    }).sort({ createdAt: -1 });
-
-    if (existingAudio) {
-      return res.status(200).json({
-        success: true,
-        message: "Speech already generated.",
-        audio: {
-          id: existingAudio._id,
-          fileId: existingAudio.fileId,
-          originalName: existingAudio.originalName,
-          accent: existingAudio.accent,
-          gender: existingAudio.gender,
-          voiceModel: existingAudio.voiceModel,
-          fileSize: existingAudio.fileSize,
-          audioUrl: existingAudio.audioUrl,
-        },
-      });
-    }
-
-    console.log("=================================");
-
-    console.log("Generating speech");
-
-    console.log("User:", req.user.id);
-
-    console.log("File ID:", fileId);
-
-    console.log("File:", file.originalName);
-
-    console.log("Accent:", accent);
-
-    console.log("Gender:", gender);
-
-    console.log("Model:", model);
-
-    console.log("Text length:", normalizedText.length);
-
-    console.log(
-      "Model path:",
-      path.join(process.cwd(), "tts", "models", `${model}.onnx`),
-    );
-
-    console.log("=================================");
-
-    // ========================================================
-    // CREATE TEMPORARY AUDIO PATH
-    // ========================================================
-
-    const filename = `speech-${Date.now()}.wav`;
-
-    const outputDirectory = path.join(process.cwd(), "temp", "tts");
-
-    // Create temp directory
-    if (!fs.existsSync(outputDirectory)) {
-      fs.mkdirSync(outputDirectory, {
-        recursive: true,
-      });
-    }
-
-    outputPath = path.join(outputDirectory, filename);
-
-    // ========================================================
-    // GENERATE AUDIO WITH PIPER
-    // ========================================================
-
-    console.log("Starting Piper speech generation...");
-
-    await generateSpeech({
-      text: normalizedText,
-      accent,
-      gender,
-      outputPath,
-    });
-
-    console.log("Piper generation completed.");
-
-    // ========================================================
-    // CHECK AUDIO
-    // ========================================================
-
-    if (!fs.existsSync(outputPath)) {
-      throw new Error("Audio file was not created");
-    }
-
-    const stats = fs.statSync(outputPath);
-
-    if (stats.size === 0) {
-      throw new Error("Generated audio file is empty");
-    }
-
-    console.log("Generated audio size:", stats.size, "bytes");
-
-    // ========================================================
-    // UPLOAD AUDIO TO CLOUDINARY
-    // ========================================================
-
-    console.log("Uploading audio to Cloudinary...");
-
-    const cloudinaryResult = await cloudinary.uploader.upload(outputPath, {
-      resource_type: "video",
-      folder: "sonar/audio",
-
-      public_id: `speech-${Date.now()}`,
-    });
-
-    console.log("Audio uploaded to Cloudinary:");
-
-    console.log(cloudinaryResult.secure_url);
-
-    // ========================================================
-    // SAVE AUDIO TO MONGODB
-    // ========================================================
-
-    const audio = await Audio.create({
-      userId: req.user.id,
-
-      fileId: file._id,
-
-      textHash,
-
-      originalName: `${path.parse(file.originalName).name}.wav`,
-
-      audioUrl: cloudinaryResult.secure_url,
-
-      mimeType: "audio/wav",
-
-      fileSize: stats.size,
-
-      accent,
-
-      gender,
-
-      voiceModel: model,
-    });
-
-    console.log("Audio saved to MongoDB:", audio._id);
-
-    // ========================================================
-    // DELETE TEMPORARY AUDIO
-    // ========================================================
-
-    if (outputPath && fs.existsSync(outputPath)) {
-      fs.unlinkSync(outputPath);
-
-      console.log("Temporary audio deleted.");
-    }
-
-    // ========================================================
-    // RESPONSE
-    // ========================================================
-
-    return res.status(201).json({
-      success: true,
-
-      message: "Speech generated successfully.",
-
-      audio: {
-        id: audio._id,
-
-        fileId: audio.fileId,
-
-        originalName: audio.originalName,
-
-        accent: audio.accent,
-
-        gender: audio.gender,
-
-        voiceModel: audio.voiceModel,
-
-        fileSize: audio.fileSize,
-
-        audioUrl: audio.audioUrl,
-      },
-    });
-  } catch (error) {
-    // ========================================================
-    // LOG ERROR
-    // ========================================================
-
-    console.error("Generate speech error:", error);
-
-    // ========================================================
-    // DELETE TEMP AUDIO
-    // ========================================================
-
-    if (outputPath && fs.existsSync(outputPath)) {
-      try {
-        fs.unlinkSync(outputPath);
-
-        console.log("Deleted temporary audio after failure.");
-      } catch (deleteError) {
-        console.error("Failed to delete temporary audio:", deleteError);
-      }
-    }
-
-    return res.status(500).json({
-      success: false,
-      message: error.message || "Failed to generate speech",
-      error: error.message,
-    });
   }
 };

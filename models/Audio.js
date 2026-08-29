@@ -44,7 +44,7 @@ const audioSchema = new mongoose.Schema(
 
     mimeType: {
       type: String,
-      default: "audio/wav",
+      default: "audio/mpeg",
     },
 
     fileSize: {

@@ -5,14 +5,8 @@ node_modules/
 # Temporary PDF uploads
 uploads/
 
-# Piper generated audio
+# Generated audio
 tts/output/
-
-# Piper models
-# tts/models/
-
-# Piper test audio
-tts/test-*.wav
 
 # Temporary files
 temp/
