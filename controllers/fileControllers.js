@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import os from "os";
-
+import mongoose from "mongoose";
 import File from "../models/File.js";
 import extractTextFromPDF from "../services/pdfServices.js";
 
@@ -47,23 +47,14 @@ export const uploadFile = async (req, res) => {
     const tempDirectory = os.tmpdir();
 
     const temporaryFileName = `sonar-${Date.now()}-${Math.round(
-      Math.random() * 1e9
+      Math.random() * 1e9,
     )}.pdf`;
 
-    temporaryFilePath = path.join(
-      tempDirectory,
-      temporaryFileName
-    );
+    temporaryFilePath = path.join(tempDirectory, temporaryFileName);
 
-    fs.writeFileSync(
-      temporaryFilePath,
-      req.file.buffer
-    );
+    fs.writeFileSync(temporaryFilePath, req.file.buffer);
 
-    console.log(
-      "Temporary PDF created:",
-      temporaryFilePath
-    );
+    console.log("Temporary PDF created:", temporaryFilePath);
 
     // ========================================================
     // EXTRACT PDF TEXT
@@ -71,13 +62,9 @@ export const uploadFile = async (req, res) => {
 
     console.log("Extracting PDF text...");
 
-    const extractedText = await extractTextFromPDF(
-      temporaryFilePath
-    );
+    const extractedText = await extractTextFromPDF(temporaryFilePath);
 
-    console.log(
-      "PDF text extraction completed."
-    );
+    console.log("PDF text extraction completed.");
 
     // ========================================================
     // CREATE CLOUDINARY PUBLIC ID
@@ -85,8 +72,7 @@ export const uploadFile = async (req, res) => {
 
     const baseName = path
       .parse(req.file.originalname)
-      .name
-      .replace(/[^a-zA-Z0-9_-]/g, "_");
+      .name.replace(/[^a-zA-Z0-9_-]/g, "_");
 
     const publicId = `${Date.now()}-${baseName}`;
 
@@ -94,30 +80,22 @@ export const uploadFile = async (req, res) => {
     // UPLOAD PDF TO CLOUDINARY
     // ========================================================
 
-    console.log(
-      "Uploading PDF to Cloudinary..."
+    console.log("Uploading PDF to Cloudinary...");
+
+    const cloudinaryResult = await cloudinary.uploader.upload(
+      temporaryFilePath,
+      {
+        resource_type: "raw",
+        folder: "sonar/pdfs",
+        public_id: publicId,
+      },
     );
 
-    const cloudinaryResult =
-      await cloudinary.uploader.upload(
-        temporaryFilePath,
-        {
-          resource_type: "raw",
-          folder: "sonar/pdfs",
-          public_id: publicId,
-        }
-      );
+    cloudinaryPublicId = cloudinaryResult.public_id;
 
-    cloudinaryPublicId =
-      cloudinaryResult.public_id;
+    console.log("PDF uploaded to Cloudinary:");
 
-    console.log(
-      "PDF uploaded to Cloudinary:"
-    );
-
-    console.log(
-      cloudinaryResult.secure_url
-    );
+    console.log(cloudinaryResult.secure_url);
 
     // ========================================================
     // SAVE FILE TO MONGODB
@@ -126,20 +104,15 @@ export const uploadFile = async (req, res) => {
     const file = await File.create({
       userId,
 
-      originalName:
-        req.file.originalname,
+      originalName: req.file.originalname,
 
-      cloudinaryUrl:
-        cloudinaryResult.secure_url,
+      cloudinaryUrl: cloudinaryResult.secure_url,
 
-      cloudinaryPublicId:
-        cloudinaryResult.public_id,
+      cloudinaryPublicId: cloudinaryResult.public_id,
 
-      fileSize:
-        req.file.size,
+      fileSize: req.file.size,
 
-      mimeType:
-        req.file.mimetype,
+      mimeType: req.file.mimetype,
 
       extractedText,
 
@@ -147,26 +120,16 @@ export const uploadFile = async (req, res) => {
       isPinned: false,
     });
 
-    console.log(
-      "PDF information saved to MongoDB:",
-      file._id
-    );
+    console.log("PDF information saved to MongoDB:", file._id);
 
     // ========================================================
     // DELETE TEMPORARY FILE
     // ========================================================
 
-    if (
-      temporaryFilePath &&
-      fs.existsSync(temporaryFilePath)
-    ) {
-      fs.unlinkSync(
-        temporaryFilePath
-      );
+    if (temporaryFilePath && fs.existsSync(temporaryFilePath)) {
+      fs.unlinkSync(temporaryFilePath);
 
-      console.log(
-        "Temporary PDF deleted."
-      );
+      console.log("Temporary PDF deleted.");
     }
 
     // ========================================================
@@ -176,22 +139,18 @@ export const uploadFile = async (req, res) => {
     return res.status(201).json({
       success: true,
 
-      message:
-        "PDF uploaded successfully.",
+      message: "PDF uploaded successfully.",
 
       fileId: file._id,
 
       file: {
         id: file._id,
 
-        originalName:
-          file.originalName,
+        originalName: file.originalName,
 
-        fileUrl:
-          file.cloudinaryUrl,
+        fileUrl: file.cloudinaryUrl,
 
-        isPinned:
-          file.isPinned,
+        isPinned: file.isPinned,
       },
     });
   } catch (error) {
@@ -199,32 +158,19 @@ export const uploadFile = async (req, res) => {
     // LOG ERROR
     // ========================================================
 
-    console.error(
-      "Upload file error:",
-      error
-    );
+    console.error("Upload file error:", error);
 
     // ========================================================
     // DELETE TEMPORARY FILE
     // ========================================================
 
-    if (
-      temporaryFilePath &&
-      fs.existsSync(temporaryFilePath)
-    ) {
+    if (temporaryFilePath && fs.existsSync(temporaryFilePath)) {
       try {
-        fs.unlinkSync(
-          temporaryFilePath
-        );
+        fs.unlinkSync(temporaryFilePath);
 
-        console.log(
-          "Temporary PDF deleted after failure."
-        );
+        console.log("Temporary PDF deleted after failure.");
       } catch (deleteError) {
-        console.error(
-          "Failed to delete temporary PDF:",
-          deleteError
-        );
+        console.error("Failed to delete temporary PDF:", deleteError);
       }
     }
 
@@ -234,20 +180,15 @@ export const uploadFile = async (req, res) => {
 
     if (cloudinaryPublicId) {
       try {
-        await cloudinary.uploader.destroy(
-          cloudinaryPublicId,
-          {
-            resource_type: "raw",
-          }
-        );
+        await cloudinary.uploader.destroy(cloudinaryPublicId, {
+          resource_type: "raw",
+        });
 
-        console.log(
-          "Cloudinary PDF deleted after failure."
-        );
+        console.log("Cloudinary PDF deleted after failure.");
       } catch (cloudinaryDeleteError) {
         console.error(
           "Failed to delete Cloudinary PDF:",
-          cloudinaryDeleteError
+          cloudinaryDeleteError,
         );
       }
     }
@@ -259,11 +200,9 @@ export const uploadFile = async (req, res) => {
     return res.status(500).json({
       success: false,
 
-      message:
-        "Failed to upload PDF.",
+      message: "Failed to upload PDF.",
 
-      error:
-        error.message,
+      error: error.message,
     });
   }
 };
@@ -277,6 +216,12 @@ export const getFile = async (req, res) => {
     const { fileId } = req.params;
 
     const userId = req.user.id;
+    if (!mongoose.Types.ObjectId.isValid(fileId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid file ID.",
+      });
+    }
 
     // ========================================================
     // FIND FILE BELONGING TO USER
@@ -304,24 +249,17 @@ export const getFile = async (req, res) => {
       file: {
         id: file._id,
 
-        originalName:
-          file.originalName,
+        originalName: file.originalName,
 
-        fileUrl:
-          file.cloudinaryUrl,
+        fileUrl: file.cloudinaryUrl,
 
-        extractedText:
-          file.extractedText,
+        extractedText: file.extractedText,
 
-        isPinned:
-          file.isPinned,
+        isPinned: file.isPinned,
       },
     });
   } catch (error) {
-    console.error(
-      "Get file error:",
-      error
-    );
+    console.error("Get file error:", error);
 
     return res.status(500).json({
       success: false,
@@ -349,9 +287,7 @@ export const getRecentFiles = async (req, res) => {
         createdAt: -1,
       })
       .limit(5)
-      .select(
-        "_id originalName createdAt isPinned"
-      );
+      .select("_id originalName createdAt isPinned");
 
     // ========================================================
     // RESPONSE
@@ -363,26 +299,19 @@ export const getRecentFiles = async (req, res) => {
       files: files.map((file) => ({
         id: file._id,
 
-        originalName:
-          file.originalName,
+        originalName: file.originalName,
 
-        createdAt:
-          file.createdAt,
+        createdAt: file.createdAt,
 
-        isPinned:
-          file.isPinned,
+        isPinned: file.isPinned,
       })),
     });
   } catch (error) {
-    console.error(
-      "Get recent files error:",
-      error
-    );
+    console.error("Get recent files error:", error);
 
     return res.status(500).json({
       success: false,
-      message:
-        "Failed to get recent files.",
+      message: "Failed to get recent files.",
     });
   }
 };
@@ -406,9 +335,7 @@ export const getPinnedFiles = async (req, res) => {
       .sort({
         updatedAt: -1,
       })
-      .select(
-        "_id originalName createdAt updatedAt isPinned"
-      );
+      .select("_id originalName createdAt updatedAt isPinned");
 
     // ========================================================
     // RESPONSE
@@ -420,32 +347,28 @@ export const getPinnedFiles = async (req, res) => {
       files: files.map((file) => ({
         id: file._id,
 
-        originalName:
-          file.originalName,
+        originalName: file.originalName,
 
-        createdAt:
-          file.createdAt,
+        createdAt: file.createdAt,
 
-        updatedAt:
-          file.updatedAt,
+        updatedAt: file.updatedAt,
 
-        isPinned:
-          file.isPinned,
+        isPinned: file.isPinned,
       })),
     });
   } catch (error) {
-    console.error(
-      "Get pinned files error:",
-      error
-    );
+    console.error("Get pinned files error:", error);
 
     return res.status(500).json({
       success: false,
-      message:
-        "Failed to get pinned files.",
+      message: "Failed to get pinned files.",
     });
   }
 };
+
+// ============================================================
+// TOGGLE PIN FILE
+// ============================================================
 
 // ============================================================
 // TOGGLE PIN FILE
@@ -456,6 +379,13 @@ export const togglePinFile = async (req, res) => {
     const { fileId } = req.params;
 
     const userId = req.user.id;
+
+    if (!mongoose.Types.ObjectId.isValid(fileId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid file ID.",
+      });
+    }
 
     // ========================================================
     // FIND FILE BELONGING TO CURRENT USER
@@ -492,26 +422,22 @@ export const togglePinFile = async (req, res) => {
         ? "File pinned successfully."
         : "File unpinned successfully.",
 
+      isPinned: file.isPinned,
+
       file: {
         id: file._id,
-
-        originalName:
-          file.originalName,
-
-        isPinned:
-          file.isPinned,
+        originalName: file.originalName,
+        createdAt: file.createdAt,
+        updatedAt: file.updatedAt,
+        isPinned: file.isPinned,
       },
     });
   } catch (error) {
-    console.error(
-      "Toggle pin file error:",
-      error
-    );
+    console.error("Toggle pin file error:", error);
 
     return res.status(500).json({
       success: false,
-      message:
-        "Failed to update pinned file.",
+      message: "Failed to update pinned file.",
     });
   }
 };
