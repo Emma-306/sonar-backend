@@ -85,7 +85,6 @@ const generateSpeechRequest = ({ text, accent, gender, outputPath }) => {
       body: JSON.stringify({
         text: normalizedText,
         model_id: process.env.ELEVENLABS_MODEL_ID || "eleven_multilingual_v2",
-        output_format: "mp3_44100_128",
       }),
     })
       .then(async (response) => {
