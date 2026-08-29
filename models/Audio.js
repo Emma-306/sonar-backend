@@ -22,6 +22,11 @@ const audioSchema = new mongoose.Schema(
       required: true,
     },
 
+    textHash: {
+      type: String,
+      trim: true,
+    },
+
     // ==========================================
     // AUDIO INFORMATION
     // ==========================================

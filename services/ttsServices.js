@@ -326,10 +326,10 @@ const generateSpeechRequest = ({ text, accent, gender, outputPath }) => {
       });
 
       // ========================================================
-      // SEND JSON REQUEST TO PIPER
+      // SEND THE COMPLETE DOCUMENT AS ONE PIPER UTTERANCE
       // ========================================================
 
-      const payload = text.trim();
+      const payload = text.trim().replace(/\s+/g, " ");
 
       console.log(`Sending request ${requestId} to Piper...`);
 

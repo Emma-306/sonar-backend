@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { createHash } from "crypto";
 import path from "path";
 import fs from "fs";
 
@@ -172,10 +173,14 @@ export const generateUserSpeech = async (req, res) => {
       });
     }
 
+    const normalizedText = text.trim().replace(/\s+/g, " ");
+    const textHash = createHash("sha256").update(normalizedText).digest("hex");
+
     const existingAudio = await Audio.findOne({
       userId: req.user.id,
       fileId: file._id,
       voiceModel: model,
+      textHash,
     }).sort({ createdAt: -1 });
 
     if (existingAudio) {
@@ -237,7 +242,7 @@ export const generateUserSpeech = async (req, res) => {
     console.log("Starting Piper speech generation...");
 
     await generateSpeech({
-      text: text.trim(),
+      text: normalizedText,
       accent,
       gender,
       outputPath,
@@ -286,6 +291,8 @@ export const generateUserSpeech = async (req, res) => {
       userId: req.user.id,
 
       fileId: file._id,
+
+      textHash,
 
       originalName: `${path.parse(file.originalName).name}.wav`,
 
