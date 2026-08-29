@@ -23,6 +23,80 @@ const audioResponse = (audio) => ({
   audioUrl: audio.audioUrl,
 });
 
+const runningJobs = new Set();
+
+const processSpeechJob = async (jobId) => {
+  if (runningJobs.has(jobId)) return;
+
+  runningJobs.add(jobId);
+
+  try {
+    const job = await SpeechJob.findOne({ jobId });
+    if (!job || job.status !== "pending") return;
+
+    const [user, file] = await Promise.all([
+      User.findById(job.userId),
+      File.findOne({ _id: job.fileId, userId: job.userId }),
+    ]);
+
+    if (!user || !file) {
+      throw new Error("Speech source file or user was not found");
+    }
+
+    const accent = user.onboarding?.preferredAccent;
+    const gender = user.onboarding?.preferredVoiceGender;
+    const model = getVoiceModel(accent, gender);
+    const normalizedText = file.extractedText?.trim().replace(/\s+/g, " ");
+
+    if (!normalizedText) throw new Error("No extracted text is available for this PDF");
+
+    const outputPath = path.join(process.cwd(), "temp", "tts", `speech-${jobId}.wav`);
+
+    console.log("Starting background Piper generation", {
+      jobId,
+      fileId: job.fileId,
+      textLength: normalizedText.length,
+      model,
+    });
+
+    await generateSpeech({ text: normalizedText, accent, gender, outputPath });
+    const stats = fs.statSync(outputPath);
+    const cloudinaryResult = await cloudinary.uploader.upload(outputPath, {
+      resource_type: "video",
+      folder: "sonar/audio",
+      public_id: `speech-${Date.now()}`,
+    });
+
+    const audio = await Audio.create({
+      userId: job.userId,
+      fileId: job.fileId,
+      textHash: job.textHash,
+      originalName: `${path.parse(file.originalName).name}.wav`,
+      audioUrl: cloudinaryResult.secure_url,
+      mimeType: "audio/wav",
+      fileSize: stats.size,
+      accent,
+      gender,
+      voiceModel: model,
+    });
+
+    await SpeechJob.findOneAndUpdate(
+      { jobId },
+      { status: "completed", audio: audioResponse(audio), message: null },
+    );
+  } catch (error) {
+    console.error("Background speech generation failed:", error);
+    await SpeechJob.findOneAndUpdate(
+      { jobId },
+      { status: "failed", message: error.message },
+    );
+  } finally {
+    const outputPath = path.join(process.cwd(), "temp", "tts", `speech-${jobId}.wav`);
+    if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+    runningJobs.delete(jobId);
+  }
+};
+
 // ============================================================
 // GET USER VOICE
 // ============================================================
@@ -90,6 +164,10 @@ export const getSpeechJob = async (req, res) => {
       success: false,
       message: "Speech job not found",
     });
+  }
+
+  if (job.status === "pending" && !runningJobs.has(job.jobId)) {
+    void processSpeechJob(job.jobId);
   }
 
   return res.status(200).json({
@@ -193,66 +271,7 @@ export const generateUserSpeechAsync = async (req, res) => {
       message: "Speech generation started",
     });
 
-    const outputPath = path.join(
-      process.cwd(),
-      "temp",
-      "tts",
-      `speech-${jobId}.wav`,
-    );
-
-    try {
-      console.log("Starting background Piper generation", {
-        jobId,
-        fileId,
-        textLength: normalizedText.length,
-        model,
-      });
-
-      await generateSpeech({
-        text: normalizedText,
-        accent,
-        gender,
-        outputPath,
-      });
-      const stats = fs.statSync(outputPath);
-      const cloudinaryResult = await cloudinary.uploader.upload(outputPath, {
-        resource_type: "video",
-        folder: "sonar/audio",
-        public_id: `speech-${Date.now()}`,
-      });
-
-      const audio = await Audio.create({
-        userId: req.user.id,
-        fileId: file._id,
-        textHash,
-        originalName: `${path.parse(file.originalName).name}.wav`,
-        audioUrl: cloudinaryResult.secure_url,
-        mimeType: "audio/wav",
-        fileSize: stats.size,
-        accent,
-        gender,
-        voiceModel: model,
-      });
-
-      await SpeechJob.findOneAndUpdate(
-        { jobId },
-        {
-          status: "completed",
-          audio: audioResponse(audio),
-        },
-      );
-    } catch (error) {
-      console.error("Background speech generation failed:", error);
-      await SpeechJob.findOneAndUpdate(
-        { jobId },
-        {
-          status: "failed",
-          message: error.message,
-        },
-      );
-    } finally {
-      if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
-    }
+    void processSpeechJob(jobId);
 
     return undefined;
   } catch (error) {
