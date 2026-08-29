@@ -320,3 +320,57 @@ export const getFile = async (req, res) => {
     });
   }
 };
+
+// ============================================================
+// GET RECENT FILES
+// ============================================================
+
+export const getRecentFiles = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // ========================================================
+    // FIND USER'S 5 MOST RECENT FILES
+    // ========================================================
+
+    const files = await File.find({
+      userId,
+    })
+      .sort({
+        createdAt: -1,
+      })
+      .limit(5)
+      .select(
+        "_id originalName createdAt"
+      );
+
+    // ========================================================
+    // RESPONSE
+    // ========================================================
+
+    return res.status(200).json({
+      success: true,
+
+      files: files.map((file) => ({
+        id: file._id,
+
+        originalName:
+          file.originalName,
+
+        createdAt:
+          file.createdAt,
+      })),
+    });
+  } catch (error) {
+    console.error(
+      "Get recent files error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        "Failed to get recent files.",
+    });
+  }
+};

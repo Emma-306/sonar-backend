@@ -9,6 +9,10 @@ import ttsRoutes from "./routes/ttsRoutes.js";
 
 const app = express();
 
+// ==========================================
+// CORS CONFIGURATION
+// ==========================================
+
 const configuredOrigins = (process.env.CLIENT_URLS || "")
   .split(",")
   .filter(Boolean);
@@ -20,14 +24,21 @@ const allowedOrigins = [
 ]
   .map((origin) => origin.trim())
   .filter(Boolean)
-  .filter((origin, index, origins) => origins.indexOf(origin) === index);
+  .filter(
+    (origin, index, origins) =>
+      origins.indexOf(origin) === index
+  );
 
 app.use(
   cors({
     origin: allowedOrigins,
     credentials: true,
-  }),
+  })
 );
+
+// ==========================================
+// MIDDLEWARE
+// ==========================================
 
 app.use(express.json());
 
@@ -50,6 +61,10 @@ app.use("/api/onboarding", onboardingRoutes);
 
 // ==========================================
 // FILE ROUTES
+// Includes:
+// POST /api/files/upload
+// GET  /api/files/recent
+// GET  /api/files/:fileId
 // ==========================================
 
 app.use("/api/files", fileRoutes);
