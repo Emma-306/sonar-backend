@@ -214,6 +214,13 @@ export const generateUserSpeech = async (req, res) => {
 
     console.log("Model:", model);
 
+    console.log("Text length:", normalizedText.length);
+
+    console.log(
+      "Model path:",
+      path.join(process.cwd(), "tts", "models", `${model}.onnx`),
+    );
+
     console.log("=================================");
 
     // ========================================================
@@ -369,7 +376,7 @@ export const generateUserSpeech = async (req, res) => {
 
     return res.status(500).json({
       success: false,
-      message: "Failed to generate speech",
+      message: error.message || "Failed to generate speech",
       error: error.message,
     });
   }
