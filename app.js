@@ -9,13 +9,18 @@ import ttsRoutes from "./routes/ttsRoutes.js";
 
 const app = express();
 
-const allowedOrigins = (
-  process.env.CLIENT_URLS ||
-  "http://localhost:5173,https://sonar-1-iop9.onrender.com"
-)
+const configuredOrigins = (process.env.CLIENT_URLS || "")
   .split(",")
-  .map((origin) => origin.trim())
   .filter(Boolean);
+
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://sonar-1-iop9.onrender.com",
+  ...configuredOrigins,
+]
+  .map((origin) => origin.trim())
+  .filter(Boolean)
+  .filter((origin, index, origins) => origins.indexOf(origin) === index);
 
 app.use(
   cors({

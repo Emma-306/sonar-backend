@@ -6,6 +6,6 @@ services:
     startCommand: npm start
     envVars:
       - key: CLIENT_URLS
-        value: https://sonar-1-iop9.onrender.com
+        value: http://localhost:5173,https://sonar-1-iop9.onrender.com
       - key: PIPER_PYTHON
         value: python3
