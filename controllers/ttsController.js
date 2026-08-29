@@ -48,9 +48,15 @@ const processSpeechJob = async (jobId) => {
     const model = getVoiceModel(accent, gender);
     const normalizedText = file.extractedText?.trim().replace(/\s+/g, " ");
 
-    if (!normalizedText) throw new Error("No extracted text is available for this PDF");
+    if (!normalizedText)
+      throw new Error("No extracted text is available for this PDF");
 
-    const outputPath = path.join(process.cwd(), "temp", "tts", `speech-${jobId}.wav`);
+    const outputPath = path.join(
+      process.cwd(),
+      "temp",
+      "tts",
+      `speech-${jobId}.mp3`,
+    );
 
     console.log("Starting background Piper generation", {
       jobId,
@@ -71,9 +77,9 @@ const processSpeechJob = async (jobId) => {
       userId: job.userId,
       fileId: job.fileId,
       textHash: job.textHash,
-      originalName: `${path.parse(file.originalName).name}.wav`,
+      originalName: `${path.parse(file.originalName).name}.mp3`,
       audioUrl: cloudinaryResult.secure_url,
-      mimeType: "audio/wav",
+      mimeType: "audio/mpeg",
       fileSize: stats.size,
       accent,
       gender,
@@ -91,7 +97,12 @@ const processSpeechJob = async (jobId) => {
       { status: "failed", message: error.message },
     );
   } finally {
-    const outputPath = path.join(process.cwd(), "temp", "tts", `speech-${jobId}.wav`);
+    const outputPath = path.join(
+      process.cwd(),
+      "temp",
+      "tts",
+      `speech-${jobId}.wav`,
+    );
     if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
     runningJobs.delete(jobId);
   }

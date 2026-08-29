@@ -1,6 +1,5 @@
 import path from "path";
 import fs from "fs";
-import { spawn } from "child_process";
 
 // ============================================================
 // VOICE MAP
@@ -8,64 +7,30 @@ import { spawn } from "child_process";
 
 const voiceMap = {
   american: {
-    male: "en_US-ryan-medium",
-    female: "en_US-lessac-medium",
+    male:
+      process.env.ELEVENLABS_AMERICAN_MALE_VOICE_ID || "pNInz6obpgDQGcFmaJgB",
+    female:
+      process.env.ELEVENLABS_AMERICAN_FEMALE_VOICE_ID || "21m00Tcm4TlvDq8ikWAM",
   },
 
   nigerian: {
-    male: "en_GB-alan-medium",
-    female: "en_GB-cori-medium",
+    male:
+      process.env.ELEVENLABS_NIGERIAN_MALE_VOICE_ID || "pNInz6obpgDQGcFmaJgB",
+    female:
+      process.env.ELEVENLABS_NIGERIAN_FEMALE_VOICE_ID || "21m00Tcm4TlvDq8ikWAM",
   },
   british: {
-    male: "en_GB-alan-medium",
-    female: "en_GB-cori-medium",
+    male:
+      process.env.ELEVENLABS_BRITISH_MALE_VOICE_ID || "pNInz6obpgDQGcFmaJgB",
+    female:
+      process.env.ELEVENLABS_BRITISH_FEMALE_VOICE_ID || "21m00Tcm4TlvDq8ikWAM",
   },
 };
-
-// ============================================================
-// PIPER PROCESSES
-// ============================================================
-//
-// One persistent Piper process per model.
-//
-// Instead of:
-//
-// request -> Python -> Piper -> load model -> generate -> exit
-//
-// We do:
-//
-// Node -> already-running Piper -> generate
-//
-// ============================================================
-
-const piperProcesses = new Map();
-
-// ============================================================
-// PENDING REQUESTS
-// ============================================================
-
-const pendingRequests = new Map();
 
 const generationQueues = new Map();
 
-const piperPython =
-  process.env.PIPER_PYTHON ||
-  (process.platform === "win32" ? "python" : "python3");
-
 // ============================================================
-// REQUEST ID
-// ============================================================
-
-let requestCounter = 0;
-
-const createRequestId = () => {
-  requestCounter += 1;
-
-  return `${Date.now()}-${requestCounter}`;
-};
-
-// ============================================================
-// GET PIPER MODEL
+// GET ELEVENLABS VOICE ID
 // ============================================================
 
 export const getVoiceModel = (accent, gender) => {
@@ -88,159 +53,12 @@ export const getVoiceModel = (accent, gender) => {
 };
 
 // ============================================================
-// GET MODEL PATH
-// ============================================================
-
-const getModelPath = (modelName) => {
-  return path.join(process.cwd(), "tts", "models", `${modelName}.onnx`);
-};
-
-// ============================================================
-// START PERSISTENT PIPER
-// ============================================================
-
-const startPiper = (modelName) => {
-  // ----------------------------------------------------------
-  // RETURN EXISTING PROCESS
-  // ----------------------------------------------------------
-
-  if (piperProcesses.has(modelName)) {
-    const existing = piperProcesses.get(modelName);
-
-    if (!existing.process.killed) {
-      return existing;
-    }
-
-    piperProcesses.delete(modelName);
-  }
-
-  // ----------------------------------------------------------
-  // MODEL PATH
-  // ----------------------------------------------------------
-
-  const modelPath = getModelPath(modelName);
-
-  console.log("=================================");
-  console.log("Starting persistent Piper");
-  console.log("Model:", modelName);
-  console.log("Path:", modelPath);
-  console.log("=================================");
-
-  // ----------------------------------------------------------
-  // CHECK MODEL
-  // ----------------------------------------------------------
-
-  if (!fs.existsSync(modelPath)) {
-    throw new Error(`Piper model not found: ${modelPath}`);
-  }
-
-  // ----------------------------------------------------------
-  // START PIPER
-  // ----------------------------------------------------------
-
-  const piper = spawn(
-    piperPython,
-    [
-      "-m",
-      "piper",
-      "--model",
-      modelPath,
-      "--output-dir",
-      path.join(process.cwd(), "tts", "output"),
-    ],
-    {
-      stdio: ["pipe", "pipe", "pipe"],
-    },
-  );
-
-  // ----------------------------------------------------------
-  // PROCESS OBJECT
-  // ----------------------------------------------------------
-
-  const processData = {
-    process: piper,
-    modelName,
-    buffer: "",
-    ready: true,
-  };
-
-  piperProcesses.set(modelName, processData);
-
-  // ----------------------------------------------------------
-  // STDOUT
-  // ----------------------------------------------------------
-
-  piper.stdout.on("data", (data) => {
-    const output = data.toString();
-
-    console.log(`[Piper ${modelName}]`, output.trim());
-  });
-
-  // ----------------------------------------------------------
-  // STDERR
-  // ----------------------------------------------------------
-
-  piper.stderr.on("data", (data) => {
-    const output = data.toString().trim();
-
-    if (output) {
-      console.log(`[Piper ${modelName}]`, output);
-    }
-  });
-
-  // ----------------------------------------------------------
-  // PROCESS ERROR
-  // ----------------------------------------------------------
-
-  piper.on("error", (error) => {
-    console.error(`Piper ${modelName} error:`, error);
-
-    piperProcesses.delete(modelName);
-
-    // Reject requests waiting for this process
-    for (const [requestId, request] of pendingRequests) {
-      if (request.modelName === modelName) {
-        request.reject(error);
-        pendingRequests.delete(requestId);
-      }
-    }
-  });
-
-  // ----------------------------------------------------------
-  // PROCESS CLOSED
-  // ----------------------------------------------------------
-
-  piper.on("close", (code) => {
-    console.log(`Piper ${modelName} exited with code:`, code);
-
-    piperProcesses.delete(modelName);
-
-    const error =
-      code === 0
-        ? new Error("Piper process closed unexpectedly.")
-        : new Error(`Piper exited with code ${code}`);
-
-    for (const [requestId, request] of pendingRequests) {
-      if (request.modelName === modelName) {
-        request.reject(error);
-        pendingRequests.delete(requestId);
-      }
-    }
-  });
-
-  console.log(`Persistent Piper started for ${modelName}`);
-
-  return processData;
-};
-
-// ============================================================
 // GENERATE SPEECH
 // ============================================================
 
 const generateSpeechRequest = ({ text, accent, gender, outputPath }) => {
   return new Promise((resolve, reject) => {
     const modelName = getVoiceModel(accent, gender);
-    const modelPath = getModelPath(modelName);
     const normalizedText = text.trim().replace(/\s+/g, " ");
     const outputDirectory = path.dirname(outputPath);
 
@@ -249,77 +67,43 @@ const generateSpeechRequest = ({ text, accent, gender, outputPath }) => {
       return;
     }
 
-    if (!fs.existsSync(modelPath)) {
-      reject(new Error(`Piper model not found: ${modelPath}`));
+    if (!process.env.ELEVENLABS_API_KEY) {
+      reject(new Error("ELEVENLABS_API_KEY is not configured."));
       return;
     }
 
     fs.mkdirSync(outputDirectory, { recursive: true });
 
     const startedAt = Date.now();
-    const piper = spawn(
-      piperPython,
-      ["-m", "piper", "--model", modelPath, "--output-file", outputPath],
-      {
-        stdio: ["pipe", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          OMP_NUM_THREADS: "1",
-          MKL_NUM_THREADS: "1",
-          OPENBLAS_NUM_THREADS: "1",
-          ORT_NUM_THREADS: "1",
-        },
+    fetch(`https://api.elevenlabs.io/v1/text-to-speech/${modelName}`, {
+      method: "POST",
+      headers: {
+        "xi-api-key": process.env.ELEVENLABS_API_KEY,
+        "Content-Type": "application/json",
+        Accept: "audio/mpeg",
       },
-    );
+      body: JSON.stringify({
+        text: normalizedText,
+        model_id: process.env.ELEVENLABS_MODEL_ID || "eleven_multilingual_v2",
+        output_format: "mp3_44100_128",
+      }),
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          const details = await response.text();
+          throw new Error(`ElevenLabs error ${response.status}: ${details}`);
+        }
 
-    let errorOutput = "";
-    let settled = false;
-
-    const timeout = setTimeout(() => {
-      if (settled) return;
-
-      piper.kill("SIGTERM");
-      reject(new Error("Piper timed out after 180 seconds."));
-    }, 180000);
-
-    piper.stderr.on("data", (data) => {
-      errorOutput += data.toString();
-    });
-
-    piper.on("error", (error) => {
-      if (settled) return;
-
-      settled = true;
-      clearTimeout(timeout);
-      reject(new Error(`Unable to start Piper: ${error.message}`));
-    });
-
-    piper.on("close", (code) => {
-      if (settled) return;
-
-      settled = true;
-      clearTimeout(timeout);
-
-      if (code !== 0) {
-        reject(
-          new Error(`Piper exited with code ${code}: ${errorOutput.trim()}`),
-        );
-        return;
-      }
-
-      if (!fs.existsSync(outputPath) || fs.statSync(outputPath).size === 0) {
-        reject(new Error("Piper did not create a valid audio file."));
-        return;
-      }
-
-      resolve({
-        model: modelName,
-        outputPath,
-        generationTime: Date.now() - startedAt,
-      });
-    });
-
-    piper.stdin.end(`${normalizedText}\n`);
+        fs.writeFileSync(outputPath, Buffer.from(await response.arrayBuffer()));
+      })
+      .then(() => {
+        resolve({
+          model: modelName,
+          outputPath,
+          generationTime: Date.now() - startedAt,
+        });
+      })
+      .catch(reject);
   });
 };
 
@@ -344,26 +128,3 @@ export const generateSpeech = (options) => {
 
   return current;
 };
-
-// ============================================================
-// CLEANUP
-// ============================================================
-
-export const shutdownPiper = () => {
-  console.log("Shutting down persistent Piper processes...");
-
-  for (const [modelName, processData] of piperProcesses) {
-    console.log(`Stopping Piper: ${modelName}`);
-
-    processData.process.kill("SIGTERM");
-  }
-
-  piperProcesses.clear();
-};
-
-// ============================================================
-// SERVER SHUTDOWN
-// ============================================================
-
-process.on("SIGTERM", shutdownPiper);
-process.on("SIGINT", shutdownPiper);

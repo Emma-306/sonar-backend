@@ -2,10 +2,12 @@ services:
   - type: web
     name: sonar-backend-1
     runtime: node
-    buildCommand: npm install && python3 -m pip install -r requirements.txt
+    buildCommand: npm install
     startCommand: npm start
     envVars:
       - key: CLIENT_URLS
         value: http://localhost:5173,https://sonar-1-iop9.onrender.com
-      - key: PIPER_PYTHON
-        value: python3
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: ELEVENLABS_MODEL_ID
+        value: eleven_multilingual_v2
