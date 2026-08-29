@@ -39,6 +39,9 @@ app.use(cookieParser());
 
 app.use("/api/auth", authRoutes);
 
+// Backward-compatible alias for older frontend builds without /api.
+app.use("/auth", authRoutes);
+
 // ==========================================
 // ONBOARDING ROUTES
 // ==========================================
