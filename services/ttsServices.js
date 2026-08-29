@@ -141,9 +141,8 @@ const startPiper = (modelName) => {
       "piper",
       "--model",
       modelPath,
-      "--json-input",
       "--output-dir",
-      path.join(process.cwd(), "tts", "generated"),
+      path.join(process.cwd(), "tts", "output"),
     ],
     {
       stdio: ["pipe", "pipe", "pipe"],
@@ -286,7 +285,7 @@ const generateSpeechRequest = ({ text, accent, gender, outputPath }) => {
       // PIPER OUTPUT DIRECTORY
       // ========================================================
 
-      const generatedDirectory = path.join(process.cwd(), "tts", "generated");
+      const generatedDirectory = path.join(process.cwd(), "tts", "output");
 
       if (!fs.existsSync(generatedDirectory)) {
         fs.mkdirSync(generatedDirectory, {
@@ -330,9 +329,7 @@ const generateSpeechRequest = ({ text, accent, gender, outputPath }) => {
       // SEND JSON REQUEST TO PIPER
       // ========================================================
 
-      const payload = JSON.stringify({
-        text: text.trim(),
-      });
+      const payload = text.trim();
 
       console.log(`Sending request ${requestId} to Piper...`);
 
