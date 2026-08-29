@@ -48,6 +48,10 @@ const pendingRequests = new Map();
 
 const generationQueues = new Map();
 
+const piperPython =
+  process.env.PIPER_PYTHON ||
+  (process.platform === "win32" ? "python" : "python3");
+
 // ============================================================
 // REQUEST ID
 // ============================================================
@@ -254,7 +258,7 @@ const generateSpeechRequest = ({ text, accent, gender, outputPath }) => {
 
     const startedAt = Date.now();
     const piper = spawn(
-      "python",
+      piperPython,
       ["-m", "piper", "--model", modelPath, "--output-file", outputPath],
       { stdio: ["pipe", "pipe", "pipe"] },
     );
