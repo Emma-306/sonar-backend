@@ -79,18 +79,7 @@ export const generateUserSpeech = async (req, res) => {
     // REQUEST DATA
     // ========================================================
 
-    const { text, fileId } = req.body;
-
-    // ========================================================
-    // CHECK TEXT
-    // ========================================================
-
-    if (!text || typeof text !== "string" || !text.trim()) {
-      return res.status(400).json({
-        success: false,
-        message: "Text is required",
-      });
-    }
+    const { fileId } = req.body;
 
     // ========================================================
     // CHECK FILE ID
@@ -140,6 +129,15 @@ export const generateUserSpeech = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: "PDF file not found",
+      });
+    }
+
+    const text = file.extractedText;
+
+    if (!text || !text.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "No extracted text is available for this PDF",
       });
     }
 
