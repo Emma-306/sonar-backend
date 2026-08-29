@@ -260,18 +260,46 @@ const generateSpeechRequest = ({ text, accent, gender, outputPath }) => {
     const piper = spawn(
       piperPython,
       ["-m", "piper", "--model", modelPath, "--output-file", outputPath],
-      { stdio: ["pipe", "pipe", "pipe"] },
+      {
+        stdio: ["pipe", "pipe", "pipe"],
+        env: {
+          ...process.env,
+          OMP_NUM_THREADS: "1",
+          MKL_NUM_THREADS: "1",
+          OPENBLAS_NUM_THREADS: "1",
+          ORT_NUM_THREADS: "1",
+        },
+      },
     );
 
     let errorOutput = "";
+    let settled = false;
+
+    const timeout = setTimeout(() => {
+      if (settled) return;
+
+      piper.kill("SIGTERM");
+      reject(new Error("Piper timed out after 180 seconds."));
+    }, 180000);
 
     piper.stderr.on("data", (data) => {
       errorOutput += data.toString();
     });
 
-    piper.on("error", reject);
+    piper.on("error", (error) => {
+      if (settled) return;
+
+      settled = true;
+      clearTimeout(timeout);
+      reject(new Error(`Unable to start Piper: ${error.message}`));
+    });
 
     piper.on("close", (code) => {
+      if (settled) return;
+
+      settled = true;
+      clearTimeout(timeout);
+
       if (code !== 0) {
         reject(
           new Error(`Piper exited with code ${code}: ${errorOutput.trim()}`),

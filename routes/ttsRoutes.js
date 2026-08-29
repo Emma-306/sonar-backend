@@ -8,8 +8,11 @@ import {
 } from "../controllers/ttsController.js";
 
 import authMiddleware from "../middleware/authMiddleware.js";
+import { getTtsHealth } from "../controllers/ttsHealth.controller.js";
 
 const router = express.Router();
+
+router.get("/health", getTtsHealth);
 
 // ============================================================
 // GET USER VOICE
