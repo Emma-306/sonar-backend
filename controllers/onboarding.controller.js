@@ -47,19 +47,9 @@ export const completeOnboarding = async (req, res) => {
 
     const validVoices = ["male", "female"];
 
-    const validAccents = [
-      "nigerian",
-      "british",
-      "american",
-    ];
+    const validAccents = ["nigerian", "british", "american"];
 
-    const validBrandColors = [
-      "purple",
-      "blue",
-      "coral",
-      "pink",
-      "teal",
-    ];
+    const validBrandColors = ["purple", "blue", "coral", "pink", "teal"];
 
     if (!validVoices.includes(preferredVoiceGender)) {
       return res.status(400).json({
@@ -117,13 +107,24 @@ export const completeOnboarding = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: "Onboarding completed successfully",
+
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
         profilePicture: user.profilePicture,
-        onboarding: user.onboarding,
+
         onboardingCompleted: user.onboardingCompleted,
+
+        displayName: user.onboarding.displayName,
+
+        voice: user.onboarding.preferredVoiceGender,
+
+        accent: user.onboarding.preferredAccent,
+
+        brandColor: user.onboarding.brandColor,
+
+        onboarding: user.onboarding,
       },
     });
   } catch (error) {
