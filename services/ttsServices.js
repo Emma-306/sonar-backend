@@ -235,228 +235,59 @@ const startPiper = (modelName) => {
 
 const generateSpeechRequest = ({ text, accent, gender, outputPath }) => {
   return new Promise((resolve, reject) => {
-    try {
-      // ========================================================
-      // VALIDATE TEXT
-      // ========================================================
+    const modelName = getVoiceModel(accent, gender);
+    const modelPath = getModelPath(modelName);
+    const normalizedText = text.trim().replace(/\s+/g, " ");
+    const outputDirectory = path.dirname(outputPath);
 
-      if (!text || !text.trim()) {
-        return reject(new Error("Text is required."));
-      }
-
-      // ========================================================
-      // GET MODEL
-      // ========================================================
-
-      const modelName = getVoiceModel(accent, gender);
-
-      console.log("=================================");
-      console.log("Speech request");
-      console.log("Accent:", accent);
-      console.log("Gender:", gender);
-      console.log("Model:", modelName);
-      console.log("=================================");
-
-      // ========================================================
-      // OUTPUT DIRECTORY
-      // ========================================================
-
-      const outputDirectory = path.dirname(outputPath);
-
-      if (!fs.existsSync(outputDirectory)) {
-        fs.mkdirSync(outputDirectory, {
-          recursive: true,
-        });
-      }
-
-      // ========================================================
-      // START / GET PERSISTENT PIPER
-      // ========================================================
-
-      const piper = startPiper(modelName);
-
-      // ========================================================
-      // REQUEST ID
-      // ========================================================
-
-      const requestId = createRequestId();
-
-      // ========================================================
-      // PIPER OUTPUT DIRECTORY
-      // ========================================================
-
-      const generatedDirectory = path.join(process.cwd(), "tts", "output");
-
-      if (!fs.existsSync(generatedDirectory)) {
-        fs.mkdirSync(generatedDirectory, {
-          recursive: true,
-        });
-      }
-
-      // ========================================================
-      // PIPER GENERATES TIMESTAMP FILES
-      // ========================================================
-      //
-      // Piper's --output-dir generates files using a
-      // timestamp-based filename.
-      //
-      // We record the directory contents before sending
-      // the request, then find the newly generated file.
-      //
-      // ========================================================
-
-      const beforeFiles = new Set(
-        fs
-          .readdirSync(generatedDirectory)
-          .filter((file) => file.endsWith(".wav")),
-      );
-
-      // ========================================================
-      // STORE REQUEST
-      // ========================================================
-
-      pendingRequests.set(requestId, {
-        modelName,
-        outputPath,
-        resolve,
-        reject,
-        generatedDirectory,
-        beforeFiles,
-        startedAt: Date.now(),
-      });
-
-      // ========================================================
-      // SEND THE COMPLETE DOCUMENT AS ONE PIPER UTTERANCE
-      // ========================================================
-
-      const payload = text.trim().replace(/\s+/g, " ");
-
-      console.log(`Sending request ${requestId} to Piper...`);
-
-      piper.process.stdin.write(`${payload}\n`);
-
-      console.log(`Request ${requestId} sent.`);
-
-      // ========================================================
-      // WAIT FOR GENERATED FILE
-      // ========================================================
-
-      const checkForOutput = () => {
-        const request = pendingRequests.get(requestId);
-
-        if (!request) {
-          return;
-        }
-
-        let files = [];
-
-        try {
-          files = fs
-            .readdirSync(generatedDirectory)
-            .filter((file) => file.endsWith(".wav"));
-        } catch (error) {
-          request.reject(error);
-          pendingRequests.delete(requestId);
-          return;
-        }
-
-        // ------------------------------------------------------
-        // FIND NEW FILE
-        // ------------------------------------------------------
-
-        const newFiles = files.filter((file) => !request.beforeFiles.has(file));
-
-        if (newFiles.length === 0) {
-          setTimeout(checkForOutput, 25);
-          return;
-        }
-
-        // ------------------------------------------------------
-        // GET MOST RECENT FILE
-        // ------------------------------------------------------
-
-        const generatedFile = newFiles
-          .map((file) => ({
-            file,
-            fullPath: path.join(generatedDirectory, file),
-          }))
-          .sort((a, b) => {
-            return (
-              fs.statSync(b.fullPath).mtimeMs - fs.statSync(a.fullPath).mtimeMs
-            );
-          })[0];
-
-        // ------------------------------------------------------
-        // CHECK FILE
-        // ------------------------------------------------------
-
-        if (!fs.existsSync(generatedFile.fullPath)) {
-          setTimeout(checkForOutput, 25);
-          return;
-        }
-
-        const stats = fs.statSync(generatedFile.fullPath);
-
-        if (stats.size === 0) {
-          setTimeout(checkForOutput, 25);
-          return;
-        }
-
-        // ------------------------------------------------------
-        // MOVE TO REQUESTED OUTPUT PATH
-        // ------------------------------------------------------
-
-        try {
-          fs.renameSync(generatedFile.fullPath, outputPath);
-        } catch (error) {
-          request.reject(error);
-          pendingRequests.delete(requestId);
-          return;
-        }
-
-        // ------------------------------------------------------
-        // DONE
-        // ------------------------------------------------------
-
-        const generationTime = Date.now() - request.startedAt;
-
-        console.log(`Speech generated in ${generationTime}ms`);
-
-        console.log("Output:", outputPath);
-
-        console.log("File size:", stats.size, "bytes");
-
-        pendingRequests.delete(requestId);
-
-        request.resolve({
-          model: modelName,
-          outputPath,
-          generationTime,
-        });
-      };
-
-      checkForOutput();
-
-      // ========================================================
-      // SAFETY TIMEOUT
-      // ========================================================
-
-      setTimeout(() => {
-        const request = pendingRequests.get(requestId);
-
-        if (!request) {
-          return;
-        }
-
-        pendingRequests.delete(requestId);
-
-        reject(new Error("Piper speech generation timed out."));
-      }, 120000);
-    } catch (error) {
-      console.error("Piper generation error:", error);
-
-      reject(error);
+    if (!normalizedText) {
+      reject(new Error("Text is required."));
+      return;
     }
+
+    if (!fs.existsSync(modelPath)) {
+      reject(new Error(`Piper model not found: ${modelPath}`));
+      return;
+    }
+
+    fs.mkdirSync(outputDirectory, { recursive: true });
+
+    const startedAt = Date.now();
+    const piper = spawn(
+      "python",
+      ["-m", "piper", "--model", modelPath, "--output-file", outputPath],
+      { stdio: ["pipe", "pipe", "pipe"] },
+    );
+
+    let errorOutput = "";
+
+    piper.stderr.on("data", (data) => {
+      errorOutput += data.toString();
+    });
+
+    piper.on("error", reject);
+
+    piper.on("close", (code) => {
+      if (code !== 0) {
+        reject(
+          new Error(`Piper exited with code ${code}: ${errorOutput.trim()}`),
+        );
+        return;
+      }
+
+      if (!fs.existsSync(outputPath) || fs.statSync(outputPath).size === 0) {
+        reject(new Error("Piper did not create a valid audio file."));
+        return;
+      }
+
+      resolve({
+        model: modelName,
+        outputPath,
+        generationTime: Date.now() - startedAt,
+      });
+    });
+
+    piper.stdin.end(`${normalizedText}\n`);
   });
 };
 
