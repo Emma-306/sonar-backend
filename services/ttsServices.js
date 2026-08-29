@@ -139,7 +139,7 @@ const startPiper = (modelName) => {
   // ----------------------------------------------------------
 
   const piper = spawn(
-    "python",
+    piperPython,
     [
       "-m",
       "piper",

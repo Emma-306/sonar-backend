@@ -9,14 +9,19 @@ import ttsRoutes from "./routes/ttsRoutes.js";
 
 const app = express();
 
+const allowedOrigins = (
+  process.env.CLIENT_URLS ||
+  "http://localhost:5173,https://sonarttss.netlify.app"
+)
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "https://sonarttss.netlify.app",
-    ],
+    origin: allowedOrigins,
     credentials: true,
-  })
+  }),
 );
 
 app.use(express.json());
