@@ -441,3 +441,121 @@ export const togglePinFile = async (req, res) => {
     });
   }
 };
+
+// ============================================================
+// SEARCH FILES
+// ============================================================
+
+export const searchFiles = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const { q } = req.query;
+
+    // ========================================================
+    // VALIDATE SEARCH QUERY
+    // ========================================================
+
+    if (!q || !q.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Search query is required.",
+      });
+    }
+
+    const searchQuery = q.trim();
+
+    // ========================================================
+    // SEARCH USER FILES
+    // ========================================================
+
+    const files = await File.find({
+      userId,
+
+      $or: [
+        {
+          originalName: {
+            $regex: searchQuery,
+            $options: "i",
+          },
+        },
+
+        {
+          extractedText: {
+            $regex: searchQuery,
+            $options: "i",
+          },
+        },
+      ],
+    })
+      .sort({
+        updatedAt: -1,
+      })
+      .limit(20)
+      .select(
+        "_id originalName createdAt updatedAt isPinned extractedText",
+      );
+
+    // ========================================================
+    // FORMAT RESULTS
+    // ========================================================
+
+    const results = files.map((file) => {
+      // Find where the searched text appears
+      const lowerText = file.extractedText.toLowerCase();
+      const lowerQuery = searchQuery.toLowerCase();
+
+      const matchIndex = lowerText.indexOf(lowerQuery);
+
+      let preview = "";
+
+      if (matchIndex !== -1) {
+        const start = Math.max(0, matchIndex - 80);
+        const end = Math.min(
+          file.extractedText.length,
+          matchIndex + searchQuery.length + 120,
+        );
+
+        preview = file.extractedText
+          .slice(start, end)
+          .replace(/\s+/g, " ")
+          .trim();
+
+        if (start > 0) {
+          preview = `...${preview}`;
+        }
+
+        if (end < file.extractedText.length) {
+          preview = `${preview}...`;
+        }
+      }
+
+      return {
+        id: file._id,
+        originalName: file.originalName,
+        createdAt: file.createdAt,
+        updatedAt: file.updatedAt,
+        isPinned: file.isPinned,
+        preview,
+      };
+    });
+
+    // ========================================================
+    // RESPONSE
+    // ========================================================
+
+    return res.status(200).json({
+      success: true,
+      query: searchQuery,
+      count: results.length,
+      files: results,
+    });
+  } catch (error) {
+    console.error("Search files error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to search files.",
+    });
+  }
+};

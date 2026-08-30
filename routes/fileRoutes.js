@@ -1,6 +1,7 @@
 import express from "express";
 
 import uploadMiddleware from "../middleware/uploadMiddleware.js";
+
 import authMiddleware from "../middleware/authMiddleware.js";
 
 import {
@@ -9,6 +10,7 @@ import {
   getRecentFiles,
   getPinnedFiles,
   togglePinFile,
+  searchFiles,
 } from "../controllers/fileControllers.js";
 
 const router = express.Router();
@@ -21,7 +23,7 @@ router.post(
   "/upload",
   authMiddleware,
   uploadMiddleware.single("file"),
-  uploadFile
+  uploadFile,
 );
 
 // ============================================================
@@ -31,7 +33,7 @@ router.post(
 router.get(
   "/recent",
   authMiddleware,
-  getRecentFiles
+  getRecentFiles,
 );
 
 // ============================================================
@@ -41,7 +43,18 @@ router.get(
 router.get(
   "/pinned",
   authMiddleware,
-  getPinnedFiles
+  getPinnedFiles,
+);
+
+// ============================================================
+// SEARCH FILES
+// IMPORTANT: Must come before "/:fileId"
+// ============================================================
+
+router.get(
+  "/search",
+  authMiddleware,
+  searchFiles,
 );
 
 // ============================================================
@@ -51,7 +64,7 @@ router.get(
 router.patch(
   "/:fileId/pin",
   authMiddleware,
-  togglePinFile
+  togglePinFile,
 );
 
 // ============================================================
@@ -61,7 +74,7 @@ router.patch(
 router.get(
   "/:fileId",
   authMiddleware,
-  getFile
+  getFile,
 );
 
 export default router;
