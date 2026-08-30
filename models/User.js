@@ -28,8 +28,58 @@ const userSchema = new mongoose.Schema(
     },
 
     // ==========================================
+    // SUBSCRIPTION
+    // ==========================================
+
+    plan: {
+      type: String,
+      enum: ["free", "premium"],
+      default: "free",
+    },
+
+    subscription: {
+      status: {
+        type: String,
+        enum: [
+          "inactive",
+          "active",
+          "not_renewing",
+          "cancelled",
+          "expired",
+        ],
+        default: "inactive",
+      },
+
+      paystackCustomerCode: {
+        type: String,
+        default: null,
+      },
+
+      paystackSubscriptionCode: {
+        type: String,
+        default: null,
+      },
+
+      authorizationCode: {
+        type: String,
+        default: null,
+      },
+
+      startDate: {
+        type: Date,
+        default: null,
+      },
+
+      endDate: {
+        type: Date,
+        default: null,
+      },
+    },
+
+    // ==========================================
     // ONBOARDING
     // ==========================================
+
     onboarding: {
       displayName: {
         type: String,

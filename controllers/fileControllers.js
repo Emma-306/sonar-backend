@@ -3,8 +3,12 @@ import path from "path";
 import os from "os";
 import mongoose from "mongoose";
 import File from "../models/File.js";
+import User from "../models/User.js";
 import extractTextFromPDF from "../services/pdfServices.js";
-
+import {
+  reserveUsage,
+  releaseUsage,
+} from "../services/usageService.js";
 import cloudinary from "../config/cloudinary.js";
 
 // ============================================================
@@ -14,6 +18,7 @@ import cloudinary from "../config/cloudinary.js";
 export const uploadFile = async (req, res) => {
   let temporaryFilePath = null;
   let cloudinaryPublicId = null;
+  let uploadUsageReserved = false;
 
   try {
     // ========================================================
@@ -39,6 +44,33 @@ export const uploadFile = async (req, res) => {
         message: "User authentication failed.",
       });
     }
+
+    // ========================================================
+    // CHECK DAILY UPLOAD LIMIT
+    // ========================================================
+
+    const usageReservation = await reserveUsage({
+      userId,
+      type: "pdfUpload",
+    });
+
+    if (!usageReservation.allowed) {
+      return res.status(429).json({
+        success: false,
+        code: "UPLOAD_LIMIT_REACHED",
+        message:
+          usageReservation.plan === "premium"
+            ? "You've reached your Premium PDF upload limit for today."
+            : "You've reached your free PDF upload limit for today. Upgrade to Premium for 10 uploads per day.",
+        usage: {
+          used: usageReservation.used,
+          limit: usageReservation.limit,
+          remaining: usageReservation.remaining,
+        },
+      });
+    }
+
+    uploadUsageReserved = true;
 
     // ========================================================
     // CREATE TEMPORARY FILE
@@ -94,7 +126,6 @@ export const uploadFile = async (req, res) => {
     cloudinaryPublicId = cloudinaryResult.public_id;
 
     console.log("PDF uploaded to Cloudinary:");
-
     console.log(cloudinaryResult.secure_url);
 
     // ========================================================
@@ -103,24 +134,20 @@ export const uploadFile = async (req, res) => {
 
     const file = await File.create({
       userId,
-
       originalName: req.file.originalname,
-
       cloudinaryUrl: cloudinaryResult.secure_url,
-
       cloudinaryPublicId: cloudinaryResult.public_id,
-
       fileSize: req.file.size,
-
       mimeType: req.file.mimetype,
-
       extractedText,
-
       // New files are not pinned by default
       isPinned: false,
     });
 
     console.log("PDF information saved to MongoDB:", file._id);
+
+    // Successfully saved → do not release the reserved usage
+    uploadUsageReserved = false;
 
     // ========================================================
     // DELETE TEMPORARY FILE
@@ -128,7 +155,6 @@ export const uploadFile = async (req, res) => {
 
     if (temporaryFilePath && fs.existsSync(temporaryFilePath)) {
       fs.unlinkSync(temporaryFilePath);
-
       console.log("Temporary PDF deleted.");
     }
 
@@ -138,18 +164,12 @@ export const uploadFile = async (req, res) => {
 
     return res.status(201).json({
       success: true,
-
       message: "PDF uploaded successfully.",
-
       fileId: file._id,
-
       file: {
         id: file._id,
-
         originalName: file.originalName,
-
         fileUrl: file.cloudinaryUrl,
-
         isPinned: file.isPinned,
       },
     });
@@ -161,13 +181,27 @@ export const uploadFile = async (req, res) => {
     console.error("Upload file error:", error);
 
     // ========================================================
+    // RELEASE USAGE IF IT WAS RESERVED
+    // ========================================================
+
+    if (uploadUsageReserved) {
+      try {
+        await releaseUsage({
+          userId: req.user?.id,
+          type: "pdfUpload",
+        });
+      } catch (usageError) {
+        console.error("Failed to release upload usage:", usageError);
+      }
+    }
+
+    // ========================================================
     // DELETE TEMPORARY FILE
     // ========================================================
 
     if (temporaryFilePath && fs.existsSync(temporaryFilePath)) {
       try {
         fs.unlinkSync(temporaryFilePath);
-
         console.log("Temporary PDF deleted after failure.");
       } catch (deleteError) {
         console.error("Failed to delete temporary PDF:", deleteError);
@@ -183,7 +217,6 @@ export const uploadFile = async (req, res) => {
         await cloudinary.uploader.destroy(cloudinaryPublicId, {
           resource_type: "raw",
         });
-
         console.log("Cloudinary PDF deleted after failure.");
       } catch (cloudinaryDeleteError) {
         console.error(
@@ -199,9 +232,7 @@ export const uploadFile = async (req, res) => {
 
     return res.status(500).json({
       success: false,
-
       message: "Failed to upload PDF.",
-
       error: error.message,
     });
   }
@@ -245,16 +276,11 @@ export const getFile = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-
       file: {
         id: file._id,
-
         originalName: file.originalName,
-
         fileUrl: file.cloudinaryUrl,
-
         extractedText: file.extractedText,
-
         isPinned: file.isPinned,
       },
     });
@@ -295,14 +321,10 @@ export const getRecentFiles = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-
       files: files.map((file) => ({
         id: file._id,
-
         originalName: file.originalName,
-
         createdAt: file.createdAt,
-
         isPinned: file.isPinned,
       })),
     });
@@ -343,16 +365,11 @@ export const getPinnedFiles = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-
       files: files.map((file) => ({
         id: file._id,
-
         originalName: file.originalName,
-
         createdAt: file.createdAt,
-
         updatedAt: file.updatedAt,
-
         isPinned: file.isPinned,
       })),
     });
@@ -365,10 +382,6 @@ export const getPinnedFiles = async (req, res) => {
     });
   }
 };
-
-// ============================================================
-// TOGGLE PIN FILE
-// ============================================================
 
 // ============================================================
 // TOGGLE PIN FILE
@@ -417,13 +430,10 @@ export const togglePinFile = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-
       message: file.isPinned
         ? "File pinned successfully."
         : "File unpinned successfully.",
-
       isPinned: file.isPinned,
-
       file: {
         id: file._id,
         originalName: file.originalName,
@@ -471,7 +481,6 @@ export const searchFiles = async (req, res) => {
 
     const files = await File.find({
       userId,
-
       $or: [
         {
           originalName: {
@@ -479,7 +488,6 @@ export const searchFiles = async (req, res) => {
             $options: "i",
           },
         },
-
         {
           extractedText: {
             $regex: searchQuery,

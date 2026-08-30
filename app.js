@@ -6,6 +6,8 @@ import authRoutes from "./routes/authRoutes.js";
 import onboardingRoutes from "./routes/onboardingRoutes.js";
 import fileRoutes from "./routes/fileRoutes.js";
 import ttsRoutes from "./routes/ttsRoutes.js";
+import usageRoutes from "./routes/usageRoutes.js";
+import paymentRoutes from "./routes/paymentRoutes.js";
 
 const app = express();
 
@@ -15,6 +17,7 @@ const app = express();
 
 const configuredOrigins = (process.env.CLIENT_URLS || "")
   .split(",")
+  .map((origin) => origin.trim())
   .filter(Boolean);
 
 const allowedOrigins = [
@@ -61,10 +64,6 @@ app.use("/api/onboarding", onboardingRoutes);
 
 // ==========================================
 // FILE ROUTES
-// Includes:
-// POST /api/files/upload
-// GET  /api/files/recent
-// GET  /api/files/:fileId
 // ==========================================
 
 app.use("/api/files", fileRoutes);
@@ -74,5 +73,19 @@ app.use("/api/files", fileRoutes);
 // ==========================================
 
 app.use("/api/tts", ttsRoutes);
+
+// ==========================================
+// USAGE ROUTES
+// ==========================================
+
+app.use("/api/usage", usageRoutes);
+
+// ==========================================
+// PAYMENT ROUTES
+// POST /api/payments/initialize
+// POST /api/payments/verify
+// ==========================================
+
+app.use("/api/payments", paymentRoutes);
 
 export default app;

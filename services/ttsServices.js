@@ -7,23 +7,18 @@ import fs from "fs";
 
 const voiceMap = {
   american: {
-    male:
-      process.env.ELEVENLABS_AMERICAN_MALE_VOICE_ID || "pNInz6obpgDQGcFmaJgB",
-    female:
-      process.env.ELEVENLABS_AMERICAN_FEMALE_VOICE_ID || "21m00Tcm4TlvDq8ikWAM",
+    male: process.env.ELEVENLABS_AMERICAN_MALE_VOICE_ID,
+    female: process.env.ELEVENLABS_AMERICAN_FEMALE_VOICE_ID,
   },
 
   nigerian: {
-    male:
-      process.env.ELEVENLABS_NIGERIAN_MALE_VOICE_ID || "pNInz6obpgDQGcFmaJgB",
-    female:
-      process.env.ELEVENLABS_NIGERIAN_FEMALE_VOICE_ID || "21m00Tcm4TlvDq8ikWAM",
+    male: process.env.ELEVENLABS_NIGERIAN_MALE_VOICE_ID,
+    female: process.env.ELEVENLABS_NIGERIAN_FEMALE_VOICE_ID,
   },
+
   british: {
-    male:
-      process.env.ELEVENLABS_BRITISH_MALE_VOICE_ID || "pNInz6obpgDQGcFmaJgB",
-    female:
-      process.env.ELEVENLABS_BRITISH_FEMALE_VOICE_ID || "21m00Tcm4TlvDq8ikWAM",
+    male: process.env.ELEVENLABS_BRITISH_MALE_VOICE_ID,
+    female: process.env.ELEVENLABS_BRITISH_FEMALE_VOICE_ID,
   },
 };
 
@@ -43,84 +38,157 @@ export const getVoiceModel = (accent, gender) => {
     throw new Error(`Unsupported accent: ${accent}`);
   }
 
-  const model = accentVoices[normalizedGender];
+  const voiceId = accentVoices[normalizedGender];
 
-  if (!model) {
-    throw new Error(`Unsupported gender: ${gender}`);
+  if (!voiceId) {
+    throw new Error(
+      `No ElevenLabs voice configured for ${normalizedAccent} ${normalizedGender}`
+    );
   }
 
-  return model;
+  return voiceId;
 };
 
 // ============================================================
-// GENERATE SPEECH
+// GENERATE SPEECH REQUEST
 // ============================================================
 
-const generateSpeechRequest = ({ text, accent, gender, outputPath }) => {
+const generateSpeechRequest = ({
+  text,
+  accent,
+  gender,
+  outputPath,
+}) => {
   return new Promise((resolve, reject) => {
-    const modelName = getVoiceModel(accent, gender);
-    const normalizedText = text.trim().replace(/\s+/g, " ");
-    const outputDirectory = path.dirname(outputPath);
+    try {
+      const voiceId = getVoiceModel(accent, gender);
 
-    if (!normalizedText) {
-      reject(new Error("Text is required."));
-      return;
-    }
+      const normalizedText = text
+        .trim()
+        .replace(/\s+/g, " ");
 
-    if (!process.env.ELEVENLABS_API_KEY) {
-      reject(new Error("ELEVENLABS_API_KEY is not configured."));
-      return;
-    }
+      const outputDirectory = path.dirname(outputPath);
 
-    fs.mkdirSync(outputDirectory, { recursive: true });
+      if (!normalizedText) {
+        reject(new Error("Text is required."));
+        return;
+      }
 
-    const startedAt = Date.now();
-    fetch(`https://api.elevenlabs.io/v1/text-to-speech/${modelName}`, {
-      method: "POST",
-      headers: {
-        "xi-api-key": process.env.ELEVENLABS_API_KEY,
-        "Content-Type": "application/json",
-        Accept: "audio/mpeg",
-      },
-      body: JSON.stringify({
-        text: normalizedText,
-        model_id: process.env.ELEVENLABS_MODEL_ID || "eleven_multilingual_v2",
-      }),
-    })
-      .then(async (response) => {
-        if (!response.ok) {
-          const details = await response.text();
-          throw new Error(`ElevenLabs error ${response.status}: ${details}`);
+      if (!process.env.ELEVENLABS_API_KEY) {
+        reject(
+          new Error(
+            "ELEVENLABS_API_KEY is not configured."
+          )
+        );
+        return;
+      }
+
+      if (!process.env.ELEVENLABS_MODEL_ID) {
+        reject(
+          new Error(
+            "ELEVENLABS_MODEL_ID is not configured."
+          )
+        );
+        return;
+      }
+
+      fs.mkdirSync(outputDirectory, {
+        recursive: true,
+      });
+
+      const startedAt = Date.now();
+
+      fetch(
+        `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
+        {
+          method: "POST",
+
+          headers: {
+            "xi-api-key":
+              process.env.ELEVENLABS_API_KEY,
+
+            "Content-Type":
+              "application/json",
+
+            Accept: "audio/mpeg",
+          },
+
+          body: JSON.stringify({
+            text: normalizedText,
+
+            model_id:
+              process.env.ELEVENLABS_MODEL_ID,
+          }),
         }
+      )
+        .then(async (response) => {
+          if (!response.ok) {
+            const details =
+              await response.text();
 
-        fs.writeFileSync(outputPath, Buffer.from(await response.arrayBuffer()));
-      })
-      .then(() => {
-        resolve({
-          model: modelName,
-          outputPath,
-          generationTime: Date.now() - startedAt,
-        });
-      })
-      .catch(reject);
+            throw new Error(
+              `ElevenLabs error ${response.status}: ${details}`
+            );
+          }
+
+          const arrayBuffer =
+            await response.arrayBuffer();
+
+          fs.writeFileSync(
+            outputPath,
+            Buffer.from(arrayBuffer)
+          );
+        })
+
+        .then(() => {
+          resolve({
+            model: voiceId,
+            outputPath,
+
+            generationTime:
+              Date.now() - startedAt,
+          });
+        })
+
+        .catch(reject);
+    } catch (error) {
+      reject(error);
+    }
   });
 };
 
-export const generateSpeech = (options) => {
-  const modelName = getVoiceModel(options.accent, options.gender);
+// ============================================================
+// GENERATE SPEECH WITH QUEUE
+// ============================================================
 
-  const previous = generationQueues.get(modelName) || Promise.resolve();
+export const generateSpeech = (options) => {
+  const voiceId = getVoiceModel(
+    options.accent,
+    options.gender
+  );
+
+  const previous =
+    generationQueues.get(voiceId) ||
+    Promise.resolve();
 
   const current = previous
     .catch(() => {})
-    .then(() => generateSpeechRequest(options));
+    .then(() =>
+      generateSpeechRequest(options)
+    );
 
-  generationQueues.set(modelName, current);
+  generationQueues.set(
+    voiceId,
+    current
+  );
 
   current
     .finally(() => {
-      if (generationQueues.get(modelName) === current) {
-        generationQueues.delete(modelName);
+      if (
+        generationQueues.get(voiceId) ===
+        current
+      ) {
+        generationQueues.delete(voiceId);
       }
     })
     .catch(() => {});

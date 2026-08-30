@@ -123,6 +123,8 @@ export const googleLogin = async (
           user.onboarding?.brandColor ||
           null,
 
+        plan: user.plan || "free",
+
         onboarding:
           user.onboarding,
       },
@@ -196,6 +198,8 @@ export const getCurrentUser = async (
         brandColor:
           user.onboarding?.brandColor ||
           null,
+
+        plan: user.plan || "free",
 
         onboarding:
           user.onboarding,
