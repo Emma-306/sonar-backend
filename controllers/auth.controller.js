@@ -6,50 +6,36 @@ import generateToken from "../utils/generateToken.js";
 // GOOGLE LOGIN
 // ==========================================
 
-export const googleLogin = async (
-  req,
-  res
-) => {
+export const googleLogin = async (req, res) => {
   try {
     const { code } = req.body;
 
     if (!code) {
       return res.status(400).json({
         success: false,
-        message:
-          "Google authorization code is required",
+        message: "Google authorization code is required",
       });
     }
 
-    const googleUser =
-      await verifyGoogleCode(code);
+    const googleUser = await verifyGoogleCode(code);
 
-    const {
-      sub: googleId,
-      name,
-      email,
-      picture,
-      email_verified,
-    } = googleUser;
+    const { sub: googleId, name, email, picture, email_verified } = googleUser;
 
     if (!email_verified) {
       return res.status(401).json({
         success: false,
-        message:
-          "Google email is not verified",
+        message: "Google email is not verified",
       });
     }
 
-    let user =
-      await User.findOne({
-        googleId,
-      });
+    let user = await User.findOne({
+      googleId,
+    });
 
     if (!user) {
-      user =
-        await User.findOne({
-          email,
-        });
+      user = await User.findOne({
+        email,
+      });
 
       if (user) {
         user.googleId = googleId;
@@ -59,8 +45,7 @@ export const googleLogin = async (
         }
 
         if (picture) {
-          user.profilePicture =
-            picture;
+          user.profilePicture = picture;
         }
 
         await user.save();
@@ -68,25 +53,20 @@ export const googleLogin = async (
     }
 
     if (!user) {
-      user =
-        await User.create({
-          googleId,
-          name,
-          email,
-          profilePicture:
-            picture || null,
-          onboardingCompleted: false,
-        });
+      user = await User.create({
+        googleId,
+        name,
+        email,
+        profilePicture: picture || null,
+        onboardingCompleted: false,
+      });
     }
 
-    const token = generateToken(
-      user._id.toString()
-    );
+    const token = generateToken(user._id.toString());
 
     return res.status(200).json({
       success: true,
-      message:
-        "Google login successful",
+      message: "Google login successful",
 
       token,
 
@@ -98,48 +78,36 @@ export const googleLogin = async (
 
         email: user.email,
 
-        profilePicture:
-          user.profilePicture,
+        profilePicture: user.profilePicture,
 
-        onboardingCompleted:
-          user.onboardingCompleted,
+        onboardingCompleted: user.onboardingCompleted,
 
         // Custom display name
-        displayName:
-          user.onboarding?.displayName ||
-          user.name,
+        displayName: user.onboarding?.displayName || user.name,
 
-        voice:
-          user.onboarding
-            ?.preferredVoiceGender ||
-          null,
+        voice: user.onboarding?.preferredVoiceGender || null,
 
-        accent:
-          user.onboarding
-            ?.preferredAccent ||
-          null,
+        accent: user.onboarding?.preferredAccent || null,
 
-        brandColor:
-          user.onboarding?.brandColor ||
-          null,
+        brandColor: user.onboarding?.brandColor || null,
 
         plan: user.plan || "free",
 
-        onboarding:
-          user.onboarding,
+        subscription: user.subscription || {
+          status: "inactive",
+          startDate: null,
+          endDate: null,
+        },
+
+        onboarding: user.onboarding,
       },
     });
   } catch (error) {
-    console.error(
-      "Google login error:",
-      error
-    );
+    console.error("Google login error:", error);
 
     return res.status(401).json({
       success: false,
-      message:
-        error.message ||
-        "Google authentication failed",
+      message: error.message || "Google authentication failed",
     });
   }
 };
@@ -148,13 +116,9 @@ export const googleLogin = async (
 // GET CURRENT USER
 // ==========================================
 
-export const getCurrentUser = async (
-  req,
-  res
-) => {
+export const getCurrentUser = async (req, res) => {
   try {
-    const user =
-      await User.findById(req.user.id);
+    const user = await User.findById(req.user.id);
 
     if (!user) {
       return res.status(404).json({
@@ -174,47 +138,36 @@ export const getCurrentUser = async (
 
         email: user.email,
 
-        profilePicture:
-          user.profilePicture,
+        profilePicture: user.profilePicture,
 
-        onboardingCompleted:
-          user.onboardingCompleted,
+        onboardingCompleted: user.onboardingCompleted,
 
         // Custom display name
-        displayName:
-          user.onboarding?.displayName ||
-          user.name,
+        displayName: user.onboarding?.displayName || user.name,
 
-        voice:
-          user.onboarding
-            ?.preferredVoiceGender ||
-          null,
+        voice: user.onboarding?.preferredVoiceGender || null,
 
-        accent:
-          user.onboarding
-            ?.preferredAccent ||
-          null,
+        accent: user.onboarding?.preferredAccent || null,
 
-        brandColor:
-          user.onboarding?.brandColor ||
-          null,
+        brandColor: user.onboarding?.brandColor || null,
 
         plan: user.plan || "free",
 
-        onboarding:
-          user.onboarding,
+        subscription: user.subscription || {
+          status: "inactive",
+          startDate: null,
+          endDate: null,
+        },
+
+        onboarding: user.onboarding,
       },
     });
   } catch (error) {
-    console.error(
-      "Get current user error:",
-      error
-    );
+    console.error("Get current user error:", error);
 
     return res.status(500).json({
       success: false,
-      message:
-        "Failed to get current user",
+      message: "Failed to get current user",
     });
   }
 };
@@ -223,86 +176,46 @@ export const getCurrentUser = async (
 // UPDATE ACCOUNT SETTINGS
 // ==========================================
 
-export const updateAccountSettings = async (
-  req,
-  res
-) => {
+export const updateAccountSettings = async (req, res) => {
   try {
-    const {
-      displayName,
-      preferredVoiceGender,
-      preferredAccent,
-      brandColor,
-    } = req.body;
+    const { displayName, preferredVoiceGender, preferredAccent, brandColor } =
+      req.body;
 
-    if (
-      !displayName ||
-      !displayName.trim()
-    ) {
+    if (!displayName || !displayName.trim()) {
       return res.status(400).json({
         success: false,
-        message:
-          "Display name is required",
+        message: "Display name is required",
       });
     }
 
-    const validVoices = [
-      "male",
-      "female",
-    ];
+    const validVoices = ["male", "female"];
 
-    const validAccents = [
-      "nigerian",
-      "british",
-      "american",
-    ];
+    const validAccents = ["nigerian", "british", "american"];
 
-    const validBrandColors = [
-      "purple",
-      "blue",
-      "coral",
-      "pink",
-      "teal",
-    ];
+    const validBrandColors = ["purple", "blue", "coral", "pink", "teal"];
 
-    if (
-      !validVoices.includes(
-        preferredVoiceGender
-      )
-    ) {
+    if (!validVoices.includes(preferredVoiceGender)) {
       return res.status(400).json({
         success: false,
-        message:
-          "Invalid voice preference",
+        message: "Invalid voice preference",
       });
     }
 
-    if (
-      !validAccents.includes(
-        preferredAccent
-      )
-    ) {
+    if (!validAccents.includes(preferredAccent)) {
       return res.status(400).json({
         success: false,
-        message:
-          "Invalid accent preference",
+        message: "Invalid accent preference",
       });
     }
 
-    if (
-      !validBrandColors.includes(
-        brandColor
-      )
-    ) {
+    if (!validBrandColors.includes(brandColor)) {
       return res.status(400).json({
         success: false,
-        message:
-          "Invalid brand color",
+        message: "Invalid brand color",
       });
     }
 
-    const user =
-      await User.findById(req.user.id);
+    const user = await User.findById(req.user.id);
 
     if (!user) {
       return res.status(404).json({
@@ -316,8 +229,7 @@ export const updateAccountSettings = async (
     // user.name remains unchanged.
 
     user.onboarding = {
-      displayName:
-        displayName.trim(),
+      displayName: displayName.trim(),
 
       preferredVoiceGender,
 
@@ -330,8 +242,7 @@ export const updateAccountSettings = async (
 
     return res.status(200).json({
       success: true,
-      message:
-        "Account settings updated successfully",
+      message: "Account settings updated successfully",
 
       user: {
         id: user._id,
@@ -341,42 +252,28 @@ export const updateAccountSettings = async (
 
         email: user.email,
 
-        profilePicture:
-          user.profilePicture,
+        profilePicture: user.profilePicture,
 
-        onboardingCompleted:
-          user.onboardingCompleted,
+        onboardingCompleted: user.onboardingCompleted,
 
         // Updated display name
-        displayName:
-          user.onboarding.displayName,
+        displayName: user.onboarding.displayName,
 
-        voice:
-          user.onboarding
-            .preferredVoiceGender,
+        voice: user.onboarding.preferredVoiceGender,
 
-        accent:
-          user.onboarding
-            .preferredAccent,
+        accent: user.onboarding.preferredAccent,
 
-        brandColor:
-          user.onboarding
-            .brandColor,
+        brandColor: user.onboarding.brandColor,
 
-        onboarding:
-          user.onboarding,
+        onboarding: user.onboarding,
       },
     });
   } catch (error) {
-    console.error(
-      "Update account settings error:",
-      error
-    );
+    console.error("Update account settings error:", error);
 
     return res.status(500).json({
       success: false,
-      message:
-        "Failed to update account settings",
+      message: "Failed to update account settings",
     });
   }
 };
