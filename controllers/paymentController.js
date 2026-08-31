@@ -7,23 +7,9 @@ const PAYSTACK_API = "https://api.paystack.co";
 const PREMIUM_AMOUNT = 450000;
 
 const getFrontendCallbackUrl = () => {
-  const candidates = [
-    process.env.FRONTEND_URL,
-    ...(process.env.CLIENT_URLS || "")
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean),
-    "http://localhost:5173",
-  ].filter(Boolean);
+  const liveFrontendUrl = "https://sonartts.onrender.com";
 
-  const preferredUrl =
-    candidates.find(
-      (url) => !/localhost|127\.0\.0\.1/i.test(url) && !url.includes("0.0.0.0"),
-    ) ||
-    candidates[0] ||
-    "http://localhost:5173";
-
-  return `${preferredUrl.replace(/\/$/, "")}/#/payment-success`;
+  return `${liveFrontendUrl.replace(/\/$/, "")}/#/payment-success`;
 };
 
 const getPaystackHeaders = () => ({
