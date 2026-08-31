@@ -7,15 +7,23 @@ const PAYSTACK_API = "https://api.paystack.co";
 const PREMIUM_AMOUNT = 450000;
 
 const getFrontendCallbackUrl = () => {
-  const configuredUrl =
-    process.env.FRONTEND_URL ||
-    (process.env.CLIENT_URLS || "")
+  const candidates = [
+    process.env.FRONTEND_URL,
+    ...(process.env.CLIENT_URLS || "")
       .split(",")
       .map((value) => value.trim())
-      .find(Boolean) ||
+      .filter(Boolean),
+    "http://localhost:5173",
+  ].filter(Boolean);
+
+  const preferredUrl =
+    candidates.find(
+      (url) => !/localhost|127\.0\.0\.1/i.test(url) && !url.includes("0.0.0.0"),
+    ) ||
+    candidates[0] ||
     "http://localhost:5173";
 
-  return `${configuredUrl.replace(/\/$/, "")}/#/payment-success`;
+  return `${preferredUrl.replace(/\/$/, "")}/#/payment-success`;
 };
 
 const getPaystackHeaders = () => ({
