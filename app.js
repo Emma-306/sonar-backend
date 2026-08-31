@@ -22,7 +22,7 @@ const configuredOrigins = (process.env.CLIENT_URLS || "")
 
 const allowedOrigins = [
   "http://localhost:5173",
-  "https://sonar-1-iop9.onrender.com",
+  "https://sonartts.onrender.com",
   ...configuredOrigins,
 ]
   .map((origin) => origin.trim())
