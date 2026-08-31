@@ -61,24 +61,28 @@ app.use("/auth", authRoutes);
 // ==========================================
 
 app.use("/api/onboarding", onboardingRoutes);
+app.use("/onboarding", onboardingRoutes);
 
 // ==========================================
 // FILE ROUTES
 // ==========================================
 
 app.use("/api/files", fileRoutes);
+app.use("/files", fileRoutes);
 
 // ==========================================
 // TTS ROUTES
 // ==========================================
 
 app.use("/api/tts", ttsRoutes);
+app.use("/tts", ttsRoutes);
 
 // ==========================================
 // USAGE ROUTES
 // ==========================================
 
 app.use("/api/usage", usageRoutes);
+app.use("/usage", usageRoutes);
 
 // ==========================================
 // PAYMENT ROUTES
@@ -87,5 +91,6 @@ app.use("/api/usage", usageRoutes);
 // ==========================================
 
 app.use("/api/payments", paymentRoutes);
+app.use("/payments", paymentRoutes);
 
 export default app;
