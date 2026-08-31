@@ -60,6 +60,9 @@ export const googleLogin = async (req, res) => {
         profilePicture: picture || null,
         onboardingCompleted: false,
       });
+    } else if (picture) {
+      user.profilePicture = picture;
+      await user.save();
     }
 
     const token = generateToken(user._id.toString());
