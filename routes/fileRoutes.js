@@ -11,6 +11,7 @@ import {
   getPinnedFiles,
   togglePinFile,
   searchFiles,
+  deleteFile,
 } from "../controllers/fileControllers.js";
 
 const router = express.Router();
@@ -30,51 +31,37 @@ router.post(
 // GET RECENT FILES
 // ============================================================
 
-router.get(
-  "/recent",
-  authMiddleware,
-  getRecentFiles,
-);
+router.get("/recent", authMiddleware, getRecentFiles);
 
 // ============================================================
 // GET PINNED FILES
 // ============================================================
 
-router.get(
-  "/pinned",
-  authMiddleware,
-  getPinnedFiles,
-);
+router.get("/pinned", authMiddleware, getPinnedFiles);
 
 // ============================================================
 // SEARCH FILES
 // IMPORTANT: Must come before "/:fileId"
 // ============================================================
 
-router.get(
-  "/search",
-  authMiddleware,
-  searchFiles,
-);
+router.get("/search", authMiddleware, searchFiles);
 
 // ============================================================
 // PIN / UNPIN FILE
 // ============================================================
 
-router.patch(
-  "/:fileId/pin",
-  authMiddleware,
-  togglePinFile,
-);
+router.patch("/:fileId/pin", authMiddleware, togglePinFile);
+
+// ============================================================
+// DELETE FILE
+// ============================================================
+
+router.delete("/:fileId", authMiddleware, deleteFile);
 
 // ============================================================
 // GET SINGLE FILE
 // ============================================================
 
-router.get(
-  "/:fileId",
-  authMiddleware,
-  getFile,
-);
+router.get("/:fileId", authMiddleware, getFile);
 
 export default router;

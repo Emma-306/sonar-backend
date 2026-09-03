@@ -5,10 +5,7 @@ import mongoose from "mongoose";
 import File from "../models/File.js";
 import User from "../models/User.js";
 import extractTextFromPDF from "../services/pdfServices.js";
-import {
-  reserveUsage,
-  releaseUsage,
-} from "../services/usageService.js";
+import { reserveUsage, releaseUsage } from "../services/usageService.js";
 import cloudinary from "../config/cloudinary.js";
 
 // ============================================================
@@ -241,6 +238,43 @@ export const uploadFile = async (req, res) => {
 // ============================================================
 // GET FILE
 // ============================================================
+
+export const deleteFile = async (req, res) => {
+  try {
+    const file = await File.findOne({
+      _id: req.params.fileId,
+      userId: req.user.id,
+    });
+
+    if (!file) {
+      return res.status(404).json({
+        success: false,
+        message: "File not found.",
+      });
+    }
+
+    if (file.cloudinaryPublicId) {
+      await cloudinary.uploader.destroy(file.cloudinaryPublicId, {
+        resource_type: "raw",
+      });
+    }
+
+    await file.deleteOne();
+
+    return res.status(200).json({
+      success: true,
+      fileId: file.id,
+      message: "File deleted successfully.",
+    });
+  } catch (error) {
+    console.error("Delete file failed:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete file.",
+    });
+  }
+};
 
 export const getFile = async (req, res) => {
   try {
@@ -500,9 +534,7 @@ export const searchFiles = async (req, res) => {
         updatedAt: -1,
       })
       .limit(20)
-      .select(
-        "_id originalName createdAt updatedAt isPinned extractedText",
-      );
+      .select("_id originalName createdAt updatedAt isPinned extractedText");
 
     // ========================================================
     // FORMAT RESULTS
